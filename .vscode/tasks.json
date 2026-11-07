@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "DUPFIMS Backend Dev",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev:backend"],
+      "isBackground": true,
+      "presentation": {
+        "group": "dupfims",
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "DUPFIMS Frontend Dev",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev:frontend"],
+      "isBackground": true,
+      "presentation": {
+        "group": "dupfims",
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  LOCKED
+}
+
+enum DisciplinaryCaseStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum InformationStatus {
+  PENDING
+  REVIEWED
+  ACTIONED
+  ARCHIVED
+}
+
+model User {
+  id                  String                   @id @default(cuid())
+  username            String                   @unique
+  email               String?                  @unique
+  fullName            String
+  passwordHash        String
+  status              UserStatus               @default(ACTIVE)
+  mustChangePassword  Boolean                  @default(true)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  roles               UserRole[]
+  campuses            UserCampus[]
+  organizationalUnits UserOrganizationalUnit[]
+  notifications       Notification[]
+  sessions            UserSession[]
+  sentMessages        Message[]                @relation("MessageSender")
+  receivedMessages    Message[]                @relation("MessageRecipient")
+  submissions         InformationSubmission[]  @relation("SubmissionCreator")
+  auditEntries        AuditLog[]               @relation("AuditActor")
+  delegationsGiven    Delegation[]             @relation("DelegationGrantor")
+  delegationsReceived Delegation[]             @relation("DelegationDelegate")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isGlobal    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model Campus {
+  id           String                  @id @default(cuid())
+  code         String                  @unique
+  name         String
+  isActive     Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  users        UserCampus[]
+  students     Student[]
+  cases        DisciplinaryCase[]
+  submissions  InformationSubmission[]
+  messages     Message[]
+  auditEntries AuditLog[]
+  delegations  Delegation[]
+
+  @@index([name])
+}
+
+model UserCampus {
+  userId     String
+  campusId   String
+  isPrimary  Boolean  @default(false)
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus     Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@id([userId, campusId])
+  @@index([campusId])
+}
+
+model OrganizationalUnit {
+  id        String                   @id @default(cuid())
+  name      String                   @unique
+  parentId  String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+  parent    OrganizationalUnit?      @relation("OrganizationalHierarchy", fields: [parentId], references: [id])
+  children  OrganizationalUnit[]     @relation("OrganizationalHierarchy")
+  members   UserOrganizationalUnit[]
+}
+
+model UserOrganizationalUnit {
+  userId               String
+  organizationalUnitId String
+  assignedAt           DateTime           @default(now())
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationalUnit   OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Cascade)
+
+  @@id([userId, organizationalUnitId])
+  @@index([organizationalUnitId])
+}
+
+model Student {
+  id        String             @id @default(cuid())
+  studentId String             @unique
+  fullName  String
+  campusId  String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  campus    Campus             @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  cases     DisciplinaryCase[]
+
+  @@unique([id, campusId])
+  @@index([campusId])
+  @@index([fullName])
+}
+
+model DisciplinaryCase {
+  id         String                 @id @default(cuid())
+  caseNumber String                 @unique
+  studentId  String
+  campusId   String
+  status     DisciplinaryCaseStatus @default(OPEN)
+  summary    String
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  student    Student                @relation(fields: [studentId, campusId], references: [id, campusId], onDelete: Restrict)
+  campus     Campus                 @relation(fields: [campusId], references: [id], onDelete: Restrict)
+
+  @@index([campusId, status])
+  @@index([studentId])
+}
+
+model InformationSubmission {
+  id          String            @id @default(cuid())
+  title       String
+  content     String
+  status      InformationStatus @default(PENDING)
+  campusId    String
+  createdById String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  campus      Campus            @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  createdBy   User              @relation("SubmissionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([campusId, status])
+  @@index([createdById])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  title       String
+  message     String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  recipient   User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  campusId    String?
+  subject     String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  sender      User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  recipient   User      @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  campus      Campus?   @relation(fields: [campusId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([campusId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  campusId   String?
+  action     String
+  entityType String
+  entityId   String?
+  detail     Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  campus     Campus?  @relation(fields: [campusId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([campusId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model Delegation {
+  id         String   @id @default(cuid())
+  grantorId  String
+  delegateId String
+  campusId   String
+  startsAt   DateTime
+  endsAt     DateTime
+  createdAt  DateTime @default(now())
+  grantor    User     @relation("DelegationGrantor", fields: [grantorId], references: [id], onDelete: Restrict)
+  delegate   User     @relation("DelegationDelegate", fields: [delegateId], references: [id], onDelete: Restrict)
+  campus     Campus   @relation(fields: [campusId], references: [id], onDelete: Restrict)
+
+  @@index([delegateId, campusId, startsAt, endsAt])
+  @@index([grantorId])
+}
