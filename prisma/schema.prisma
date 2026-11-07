@@ -259,6 +259,7 @@ model Delegation {
   campusId   String
   startsAt   DateTime
   endsAt     DateTime
+  revokedAt  DateTime?
   createdAt  DateTime @default(now())
   grantor    User     @relation("DelegationGrantor", fields: [grantorId], references: [id], onDelete: Restrict)
   delegate   User     @relation("DelegationDelegate", fields: [delegateId], references: [id], onDelete: Restrict)

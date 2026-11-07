@@ -21,7 +21,8 @@ type Assignment = {
   id: string;
   name: string;
   code?: string;
-  assignable?: boolean;
+  createAllowed?: boolean;
+  changeAllowed?: boolean;
 };
 type ManagedUser = {
   id: string;
@@ -44,12 +45,21 @@ type UserOptions = {
   campuses: Assignment[];
   organizationalUnits: Assignment[];
 };
+type UserManagerRole = "System Administrator" | "Peace Forum President";
 type AuditEntry = {
   id: string;
   action: string;
   detail: unknown;
   createdAt: string;
   actor: { id: string; username: string; fullName: string } | null;
+};
+type Delegation = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  revokedAt: string | null;
+  campus: Assignment;
+  grantor: { fullName: string; username: string };
 };
 type UserForm = {
   fullName: string;
@@ -165,7 +175,11 @@ function Dialog({
   );
 }
 
-export function UserManagement() {
+export function UserManagement({
+  managerRole,
+}: {
+  managerRole: UserManagerRole;
+}) {
   const [options, setOptions] = useState<UserOptions>();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [page, setPage] = useState(1);
@@ -177,6 +191,11 @@ export function UserManagement() {
   const [panel, setPanel] = useState<Panel>(null);
   const [activeUser, setActiveUser] = useState<ManagedUser>();
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [delegationOpen, setDelegationOpen] = useState(false);
+  const [delegationCampusId, setDelegationCampusId] = useState("");
+  const [delegationStartsAt, setDelegationStartsAt] = useState("");
+  const [delegationEndsAt, setDelegationEndsAt] = useState("");
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [roleValue, setRoleValue] = useState("");
   const [resetPassword, setResetPassword] = useState("");
@@ -254,7 +273,7 @@ export function UserManagement() {
     setActiveUser(undefined);
     setForm({
       ...emptyForm,
-      roleId: options?.roles.find((role) => role.assignable)?.id ?? "",
+      roleId: options?.roles.find((role) => role.createAllowed)?.id ?? "",
     });
     setPanel("create");
   }
@@ -280,12 +299,94 @@ export function UserManagement() {
     setActiveUser(user);
     setPanel("view");
     try {
-      const result = await requestJson<{ entries: AuditEntry[] }>(
-        `/api/users/${encodeURIComponent(user.id)}/audit`,
-      );
-      setAuditEntries(result.entries);
+      const requests: Promise<unknown>[] = [
+        requestJson<{ entries: AuditEntry[] }>(
+          `/api/users/${encodeURIComponent(user.id)}/audit`,
+        ).then((result) => setAuditEntries(result.entries)),
+      ];
+      if (
+        managerRole === "Peace Forum President" &&
+        roleName(user) === "President's Representative"
+      ) {
+        requests.push(
+          requestJson<{ delegations: Delegation[] }>(
+            `/api/users/${encodeURIComponent(user.id)}/delegations`,
+          ).then((result) => setDelegations(result.delegations)),
+        );
+      }
+      await Promise.all(requests);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load history.");
+    }
+  }
+
+  function localDateTimeValue(value: Date) {
+    const localDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+    return localDate.toISOString().slice(0, 16);
+  }
+
+  function openDelegationForm() {
+    const now = new Date();
+    const end = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    setDelegationCampusId(options?.campuses[0]?.id ?? "");
+    setDelegationStartsAt(localDateTimeValue(now));
+    setDelegationEndsAt(localDateTimeValue(end));
+    setDelegationOpen(true);
+    setError("");
+  }
+
+  async function grantDelegation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeUser) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await requestJson<{ delegation: Delegation }>(
+        `/api/users/${encodeURIComponent(activeUser.id)}/delegations`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            campusId: delegationCampusId,
+            startsAt: new Date(delegationStartsAt).toISOString(),
+            endsAt: new Date(delegationEndsAt).toISOString(),
+          }),
+        },
+      );
+      setDelegations((current) => [result.delegation, ...current]);
+      setDelegationOpen(false);
+      setNotice("Time-limited campus delegation granted.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to grant delegation.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeDelegation(delegation: Delegation) {
+    if (!activeUser) return;
+    if (
+      !window.confirm(
+        `Revoke ${activeUser.fullName}'s delegation for ${delegation.campus.name}?`,
+      )
+    ) {
+      return;
+    }
+    setError("");
+    try {
+      await requestJson(
+        `/api/users/${encodeURIComponent(activeUser.id)}/delegations/${encodeURIComponent(delegation.id)}`,
+        { method: "DELETE" },
+      );
+      setDelegations((current) =>
+        current.map((item) =>
+          item.id === delegation.id
+            ? { ...item, revokedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+      setNotice("Delegation revoked.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to revoke delegation.");
     }
   }
 
@@ -451,8 +552,16 @@ export function UserManagement() {
     <section className="user-management" aria-labelledby="users-title">
       <div className="dashboard-welcome user-management-heading">
         <div>
-          <h1 id="users-title">User Management</h1>
-          <p>Manage accounts, role assignments, campus access, and account history.</p>
+          <h1 id="users-title">
+            {managerRole === "Peace Forum President"
+              ? "Peace Forum Executive Accounts"
+              : "User Management"}
+          </h1>
+          <p>
+            {managerRole === "Peace Forum President"
+              ? "Manage authorized Peace Forum representative and organizational-unit accounts."
+              : "Manage appointed Peace Forum and university leadership accounts."}
+          </p>
         </div>
         <button className="user-primary-button" type="button" onClick={startCreate}>
           <UserPlus size={16} aria-hidden="true" />
@@ -568,7 +677,7 @@ export function UserManagement() {
                       <div className="user-row-actions">
                         <button type="button" onClick={() => void viewUser(user)} aria-label={`View ${user.fullName}`} title="View details and history"><Eye size={15} /></button>
                         <button type="button" onClick={() => startEdit(user)} disabled={protectedAccount} aria-label={`Edit ${user.fullName}`} title="Edit account"><Pencil size={15} /></button>
-                        <button type="button" onClick={() => startRoleChange(user)} disabled={protectedAccount} aria-label={`Change role for ${user.fullName}`} title="Change role"><Shield size={15} /></button>
+                        <button type="button" onClick={() => startRoleChange(user)} disabled={protectedAccount || roleName(user) === "Peace Forum President"} aria-label={`Change role for ${user.fullName}`} title="Change role"><Shield size={15} /></button>
                         <button type="button" onClick={() => startPasswordReset(user)} disabled={protectedAccount} aria-label={`Reset password for ${user.fullName}`} title="Reset password"><KeyRound size={15} /></button>
                         {user.status === "ACTIVE" ? (
                           <>
@@ -603,7 +712,7 @@ export function UserManagement() {
             <div className="user-form-grid">
               <label>Full name<input required minLength={2} maxLength={160} value={form.fullName} onChange={(event) => setField("fullName", event.target.value)} autoComplete="name" /></label>
               {panel === "create" ? (
-                <label>Username<input required minLength={3} maxLength={64} pattern="[A-Za-z0-9._-]+" value={form.username} onChange={(event) => setField("username", event.target.value)} autoComplete="username" /></label>
+                <label>Username<input required minLength={3} maxLength={64} pattern="(?:[A-Za-z0-9._]|-)+" value={form.username} onChange={(event) => setField("username", event.target.value)} autoComplete="username" /><span className="user-field-hint">3–64 characters; use letters, numbers, periods, underscores, or hyphens.</span></label>
               ) : (
                 <label>Username<input value={activeUser?.username ?? ""} readOnly /></label>
               )}
@@ -617,7 +726,7 @@ export function UserManagement() {
                     const nextUnit = options?.organizationalUnits.find((unit) => unit.name === nextRoleName);
                     setField("roleId", nextRoleId);
                     setField("organizationalUnitId", nextUnit?.id ?? "");
-                  }}><option value="">Select a role</option>{options?.roles.map((role) => <option value={role.id} key={role.id} disabled={!role.assignable}>{role.name}{role.name === "Peace Forum President" ? " — leadership authorization required" : ""}</option>)}</select></label>
+                  }}><option value="">Select a role</option>{options?.roles.filter((role) => role.createAllowed).map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
                   <label>Account status<select value={form.status} onChange={(event) => setField("status", event.target.value as UserForm["status"])}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="SUSPENDED">Suspended</option></select></label>
                   <label className="user-checkbox-field"><input type="checkbox" checked readOnly /> Require password change at first login</label>
                 </>
@@ -679,6 +788,64 @@ export function UserManagement() {
                 ))}
               </ol>
             )}
+            {managerRole === "Peace Forum President" &&
+            roleName(activeUser) === "President's Representative" ? (
+              <>
+                <h3 className="user-history-title">Campus delegations</h3>
+                <p className="user-dialog-copy">
+                  Delegations are campus-specific, time-limited, and auditable.
+                  An expired or revoked delegation grants no access.
+                </p>
+                <button
+                  type="button"
+                  className="user-primary-button"
+                  onClick={openDelegationForm}
+                >
+                  <Plus size={14} /> Grant delegation
+                </button>
+                {delegations.length === 0 ? (
+                  <p className="user-empty-history">No campus delegations recorded.</p>
+                ) : (
+                  <ol className="user-history-list">
+                    {delegations.map((delegation) => {
+                      const currentlyActive =
+                        !delegation.revokedAt &&
+                        new Date(delegation.startsAt) <= new Date() &&
+                        new Date(delegation.endsAt) >= new Date();
+                      return (
+                        <li key={delegation.id}>
+                          <strong>{delegation.campus.name} ({delegation.campus.code})</strong>
+                          <span>{new Date(delegation.startsAt).toLocaleString()} – {new Date(delegation.endsAt).toLocaleString()}</span>
+                          <span>{delegation.revokedAt ? "Revoked" : currentlyActive ? "Active" : "Scheduled / expired"}</span>
+                          {!delegation.revokedAt ? (
+                            <button
+                              className="user-secondary-button"
+                              type="button"
+                              onClick={() => void revokeDelegation(delegation)}
+                            >
+                              Revoke
+                            </button>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </>
+            ) : null}
+            {delegationOpen ? (
+              <form className="user-delegation-form" onSubmit={grantDelegation}>
+                <h4>Grant campus delegation</h4>
+                <label>Campus<select required value={delegationCampusId} onChange={(event) => setDelegationCampusId(event.target.value)}><option value="">Select a campus</option>{options?.campuses.map((campus) => <option value={campus.id} key={campus.id}>{campus.name}</option>)}</select></label>
+                <label>Starts at<input required type="datetime-local" value={delegationStartsAt} onChange={(event) => setDelegationStartsAt(event.target.value)} /></label>
+                <label>Ends at<input required type="datetime-local" value={delegationEndsAt} onChange={(event) => setDelegationEndsAt(event.target.value)} /></label>
+                {error ? <p className="user-alert is-error" role="alert">{error}</p> : null}
+                <div className="user-dialog-actions">
+                  <button type="button" className="user-secondary-button" onClick={() => setDelegationOpen(false)}>Cancel</button>
+                  <button type="submit" className="user-primary-button" disabled={busy || !delegationCampusId}>{busy ? "Granting…" : "Grant delegation"}</button>
+                </div>
+              </form>
+            ) : null}
             {error ? <p className="user-alert is-error" role="alert">{error}</p> : null}
           </div>
         </Dialog>
@@ -688,7 +855,7 @@ export function UserManagement() {
         <Dialog title="Change assigned role" onClose={closePanel}>
           <div className="user-form">
             <p className="user-dialog-copy">Changing the role immediately changes this account’s permissions. The System Administrator role cannot be assigned here.</p>
-            <label>User role<select value={roleValue} onChange={(event) => setRoleValue(event.target.value)}>{options?.roles.map((role) => <option value={role.id} key={role.id} disabled={!role.assignable}>{role.name}{role.name === "Peace Forum President" ? " — leadership authorization required" : ""}</option>)}</select></label>
+            <label>User role<select value={roleValue} onChange={(event) => setRoleValue(event.target.value)}>{options?.roles.filter((role) => role.changeAllowed).map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
             {error ? <p className="user-alert is-error" role="alert">{error}</p> : null}
             <div className="user-dialog-actions"><button type="button" className="user-secondary-button" onClick={closePanel}>Cancel</button><button type="button" className="user-primary-button" disabled={busy || !roleValue} onClick={() => void changeRole()}>{busy ? "Updating…" : "Change role"}</button></div>
           </div>

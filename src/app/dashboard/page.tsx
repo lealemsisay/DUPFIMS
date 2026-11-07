@@ -3,9 +3,12 @@ import {
   Building2,
   CalendarDays,
   ClipboardCheck,
+  Database,
   FileClock,
   ShieldAlert,
   UsersRound,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -48,6 +51,76 @@ export default async function DashboardPage() {
     "System Administrator":
       "Technical administration and account management. Confidential case records are not available to this role.",
   };
+  if (primaryRole === "System Administrator") {
+    const system = metrics.systemAdmin;
+    if (!system) {
+      throw new Error("System administration metrics are unavailable.");
+    }
+
+    const systemCards = [
+      { label: "Total user accounts", value: system.totalUsers, icon: UsersRound },
+      { label: "Active accounts", value: system.activeUsers, icon: UserCheck },
+      { label: "Suspended accounts", value: system.suspendedUsers, icon: UserX },
+      { label: "Total campuses", value: system.totalCampuses, icon: Building2 },
+    ];
+
+    return (
+      <>
+        <div className="dashboard-welcome">
+          <div>
+            <h1>System Administrator Dashboard</h1>
+            <p>Technical account and campus administration.</p>
+          </div>
+          <div className="dashboard-period">
+            <Database aria-hidden="true" size={14} />
+            Database {system.databaseConnected ? "connected" : "unavailable"}
+          </div>
+        </div>
+        <section className="metric-grid" aria-label="System administration overview">
+          {systemCards.map(({ label, value, icon: Icon }) => (
+            <div className="metric-card" key={label}>
+              <span className="metric-label">
+                <Icon
+                  aria-hidden="true"
+                  size={14}
+                  style={{ marginRight: 6, verticalAlign: "middle" }}
+                />
+                {label}
+              </span>
+              <strong className="metric-value">{value.toLocaleString()}</strong>
+            </div>
+          ))}
+        </section>
+        <section className="dashboard-section system-admin-activity" aria-labelledby="system-activity-title">
+          <div className="section-heading">
+            <h2 id="system-activity-title">Recent account and campus administration</h2>
+            <span>Audited activity</span>
+          </div>
+          {system.recentAdminActivities.length === 0 ? (
+            <div className="empty-state">
+              <FileClock aria-hidden="true" size={25} />
+              <p>No account or campus administration activity has been recorded.</p>
+            </div>
+          ) : (
+            <div className="activity-list">
+              {system.recentAdminActivities.map((activity) => (
+                <div className="activity-row" key={activity.id}>
+                  <span className="activity-dot" aria-hidden="true" />
+                  <div className="activity-copy">
+                    <p>{formatActivity(activity.action, activity.entityType)}</p>
+                    <time dateTime={activity.createdAt.toISOString()}>
+                      {activity.createdAt.toLocaleString()}
+                    </time>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
   const metricCards = [
     {
       label: "Registered students",

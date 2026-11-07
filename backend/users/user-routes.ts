@@ -16,8 +16,12 @@ import {
   getManagedUserAudit,
   getManagementOptions,
   getUserDetails,
+  getRepresentativeDelegations,
+  grantRepresentativeDelegation,
   reassignManagedUser,
   resetManagedUserPassword,
+  requireUserManagerRole,
+  revokeRepresentativeDelegation,
   searchUsers,
   setManagedUserStatus,
 } from "./user-service";
@@ -29,6 +33,7 @@ import {
   updateUserSchema,
   userListQuerySchema,
 } from "./user-validation";
+import { delegationSchema } from "./delegation-validation";
 
 type UserRouterMiddleware = {
   requireSession: RequestHandler;
@@ -54,15 +59,24 @@ function getUserId(request: Request) {
   return userId;
 }
 
+function getDelegationId(request: Request) {
+  const { delegationId } = request.params;
+  if (typeof delegationId !== "string" || delegationId.length === 0) {
+    throw new UserManagementError("Active delegation not found.", 404);
+  }
+  return delegationId;
+}
+
 export function createUserRouter(middleware: UserRouterMiddleware) {
   const router = Router();
 
   router.use(middleware.requireSession, middleware.requirePasswordChanged);
   router.use((request, response, next) => {
-    const actor = request.authenticatedUser;
-    const mayManageUsers = actor?.roles.some(
+    const mayManageUsers = request.authenticatedUser?.roles.some(
       ({ name, permissions }) =>
-        name === "System Administrator" && permissions.includes("users:manage"),
+        (name === "System Administrator" ||
+          name === "Peace Forum President") &&
+        permissions.includes("users:manage"),
     );
     if (!mayManageUsers) {
       response.status(403).json({ error: "You are not authorized to manage users." });
@@ -75,7 +89,10 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
     "/options",
     route(async (_request, response) => {
       response.setHeader("Cache-Control", "private, no-store");
-      response.json(await getManagementOptions());
+      const actorRole = await requireUserManagerRole(
+        _request.authenticatedUser?.roles ?? [],
+      );
+      response.json(await getManagementOptions(actorRole));
     }),
   );
 
@@ -88,7 +105,10 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
         return;
       }
       response.setHeader("Cache-Control", "private, no-store");
-      response.json(await searchUsers(parsed.data));
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      response.json(await searchUsers(actorRole, parsed.data));
     }),
   );
 
@@ -98,11 +118,76 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
     route(async (request, response) => {
       const parsed = createUserSchema.safeParse(request.body);
       if (!parsed.success) {
+        invalidRequest(
+          response,
+          parsed.error.issues.map(({ path }) => String(path[0] ?? "")),
+        );
+        return;
+      }
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      const user = await createManagedUser(
+        getActorId(request),
+        actorRole,
+        parsed.data,
+      );
+      response.status(201).json({ user });
+    }),
+  );
+
+  router.get(
+    "/:userId/delegations",
+    route(async (request, response) => {
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json({
+        delegations: await getRepresentativeDelegations(
+          getUserId(request),
+          actorRole,
+        ),
+      });
+    }),
+  );
+
+  router.post(
+    "/:userId/delegations",
+    middleware.requireSameOrigin,
+    route(async (request, response) => {
+      const parsed = delegationSchema.safeParse(request.body);
+      if (!parsed.success) {
         invalidRequest(response);
         return;
       }
-      const user = await createManagedUser(getActorId(request), parsed.data);
-      response.status(201).json({ user });
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      const delegation = await grantRepresentativeDelegation(
+        getActorId(request),
+        actorRole,
+        getUserId(request),
+        parsed.data,
+      );
+      response.status(201).json({ delegation });
+    }),
+  );
+
+  router.delete(
+    "/:userId/delegations/:delegationId",
+    middleware.requireSameOrigin,
+    route(async (request, response) => {
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      await revokeRepresentativeDelegation(
+        getActorId(request),
+        actorRole,
+        getUserId(request),
+        getDelegationId(request),
+      );
+      response.json({ ok: true });
     }),
   );
 
@@ -110,7 +195,12 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
     "/:userId/audit",
     route(async (request, response) => {
       response.setHeader("Cache-Control", "private, no-store");
-      response.json({ entries: await getManagedUserAudit(getUserId(request)) });
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      response.json({
+        entries: await getManagedUserAudit(getUserId(request), actorRole),
+      });
     }),
   );
 
@@ -118,7 +208,12 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
     "/:userId",
     route(async (request, response) => {
       response.setHeader("Cache-Control", "private, no-store");
-      response.json({ user: await getUserDetails(getUserId(request)) });
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      response.json({
+        user: await getUserDetails(getUserId(request), actorRole),
+      });
     }),
   );
 
@@ -131,9 +226,13 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
         invalidRequest(response);
         return;
       }
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
       const user = await editManagedUser(
         getActorId(request),
         getUserId(request),
+        actorRole,
         parsed.data,
       );
       response.json({ user });
@@ -149,9 +248,13 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
         invalidRequest(response);
         return;
       }
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
       const user = await setManagedUserStatus(
         getActorId(request),
         getUserId(request),
+        actorRole,
         parsed.data,
       );
       response.json({ user });
@@ -167,9 +270,13 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
         invalidRequest(response);
         return;
       }
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
       const user = await reassignManagedUser(
         getActorId(request),
         getUserId(request),
+        actorRole,
         parsed.data,
       );
       response.json({ user });
@@ -185,9 +292,13 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
         invalidRequest(response);
         return;
       }
+      const actorRole = await requireUserManagerRole(
+        request.authenticatedUser?.roles ?? [],
+      );
       const user = await resetManagedUserPassword(
         getActorId(request),
         getUserId(request),
+        actorRole,
         parsed.data,
       );
       response.json({ user });

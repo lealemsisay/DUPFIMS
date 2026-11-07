@@ -11,6 +11,7 @@ import { getDashboardMetrics } from "../src/lib/services/dashboard";
 import { loginSchema, changePasswordSchema } from "../src/lib/validations/auth";
 import { prisma } from "./prisma";
 import { createUserRouter } from "./users/user-routes";
+import { createCampusRouter } from "./campuses/campus-routes";
 
 config({ path: resolve(process.cwd(), ".env"), override: true });
 config({ path: resolve(process.cwd(), "backend", ".env") });
@@ -149,6 +150,27 @@ function requirePasswordChanged(
     return;
   }
   next();
+}
+
+function requirePermission(permission: string) {
+  return (request: Request, response: Response, next: NextFunction) => {
+    const granted = request.authenticatedUser?.roles.some(({ permissions }) =>
+      permissions.includes(permission),
+    );
+    if (!granted) {
+      response.status(403).json({ error: "You are not authorized to access this resource." });
+      return;
+    }
+    next();
+  };
+}
+
+function moduleNotImplemented(moduleName: string) {
+  return (_request: Request, response: Response) => {
+    response.status(501).json({
+      error: `${moduleName} records and workflows are not implemented yet.`,
+    });
+  };
 }
 
 app.disable("x-powered-by");
@@ -328,6 +350,55 @@ app.use(
   }),
 );
 
+app.use(
+  "/api/campuses",
+  createCampusRouter({
+    requireSession,
+    requirePasswordChanged,
+    requireSameOrigin,
+  }),
+);
+
+app.get(
+  ["/api/students", "/api/students/:studentId"],
+  requireSession,
+  requirePasswordChanged,
+  requirePermission("student:read"),
+  moduleNotImplemented("Student management"),
+);
+app.use("/api/cases", requireSession, requirePasswordChanged);
+app.get(
+  ["/api/cases", "/api/cases/:caseId"],
+  requirePermission("case:read"),
+  moduleNotImplemented("Disciplinary case management"),
+);
+app.post(
+  "/api/cases",
+  requirePermission("case:manage"),
+  moduleNotImplemented("Disciplinary case management"),
+);
+app.patch(
+  "/api/cases/:caseId",
+  requirePermission("case:manage"),
+  moduleNotImplemented("Disciplinary case management"),
+);
+app.use("/api/information", requireSession, requirePasswordChanged);
+app.get(
+  ["/api/information", "/api/information/:submissionId"],
+  requirePermission("information:read"),
+  moduleNotImplemented("Information flow"),
+);
+app.post(
+  "/api/information",
+  requirePermission("information:submit"),
+  moduleNotImplemented("Information flow"),
+);
+app.patch(
+  "/api/information/:submissionId",
+  requirePermission("information:manage"),
+  moduleNotImplemented("Information flow"),
+);
+
 app.get(
   "/api/dashboard/metrics",
   requireSession,
@@ -339,6 +410,28 @@ app.get(
       );
       response.setHeader("Cache-Control", "private, no-store");
       response.json(metrics);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+app.get(
+  "/api/system/health",
+  requireSession,
+  requirePasswordChanged,
+  async (request, response, next) => {
+    const isSystemAdministrator = request.authenticatedUser?.roles.some(
+      ({ name }) => name === "System Administrator",
+    );
+    if (!isSystemAdministrator) {
+      response.status(403).json({ error: "You are not authorized to view system health." });
+      return;
+    }
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json({ status: "healthy", database: "connected" });
     } catch (error) {
       next(error);
     }

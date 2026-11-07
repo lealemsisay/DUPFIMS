@@ -32,6 +32,56 @@ export async function getDashboardMetrics(userId: string) {
       role.permissions.map(({ permission }) => permission.key),
     ),
   );
+  const isSystemAdministrator = user.roles.some(
+    ({ role }) => role.name === "System Administrator",
+  );
+  if (isSystemAdministrator) {
+    const [
+      totalUsers,
+      activeUsers,
+      suspendedUsers,
+      totalCampuses,
+      recentAdminActivities,
+      databaseProbe,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { status: "ACTIVE" } }),
+      prisma.user.count({ where: { status: "SUSPENDED" } }),
+      prisma.campus.count(),
+      prisma.auditLog.findMany({
+        where: { entityType: { in: ["User", "Campus"] } },
+        select: {
+          id: true,
+          action: true,
+          entityType: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      prisma.$queryRaw<Array<{ ok: number }>>`SELECT 1 AS ok`,
+    ]);
+
+    return {
+      students: null,
+      cases: null,
+      openCases: null,
+      resolvedCases: null,
+      pendingSubmissions: null,
+      campuses: [],
+      activities: [],
+      notifications: [],
+      systemAdmin: {
+        totalUsers,
+        activeUsers,
+        suspendedUsers,
+        totalCampuses,
+        recentAdminActivities,
+        databaseConnected: databaseProbe[0]?.ok === 1,
+      },
+    };
+  }
+
   const campusIds = new Set(user.campuses.map(({ campusId }) => campusId));
   const isRepresentative = user.roles.some(
     ({ role }) => role.name === "President's Representative",
@@ -45,6 +95,7 @@ export async function getDashboardMetrics(userId: string) {
         delegateId: userId,
         startsAt: { lte: now },
         endsAt: { gte: now },
+        revokedAt: null,
         grantor: {
           roles: { some: { role: { name: "Peace Forum President" } } },
         },

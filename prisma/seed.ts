@@ -46,6 +46,7 @@ const roleDefinitions = [
     isGlobal: true,
     permissions: [
       "dashboard:read",
+      "users:manage",
       "student:read",
       "case:read",
       "case:manage",
@@ -170,7 +171,6 @@ const roleDefinitions = [
       "dashboard:read",
       "users:manage",
       "campuses:manage",
-      "settings:manage",
     ],
   },
 ];

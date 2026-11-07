@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { NextFunction, Request, Response } from "express";
+import { ExclusiveRoleAlreadyAssignedError } from "./user-repository";
 import { UserManagementError } from "./user-service";
 
 export function sendUserError(
@@ -7,6 +8,10 @@ export function sendUserError(
   response: Response,
   next: NextFunction,
 ) {
+  if (error instanceof ExclusiveRoleAlreadyAssignedError) {
+    response.status(409).json({ error: error.message });
+    return;
+  }
   if (error instanceof UserManagementError) {
     response.status(error.status).json({ error: error.message });
     return;
@@ -30,8 +35,32 @@ export function sendUserError(
   next(error);
 }
 
-export function invalidRequest(response: Response) {
-  response.status(400).json({ error: "The user-management request is invalid." });
+const userFieldLabels: Record<string, string> = {
+  fullName: "Full name",
+  username: "Username",
+  email: "Email address",
+  phoneNumber: "Phone number",
+  password: "Password",
+  roleId: "User role",
+  campusId: "Campus assignment",
+  organizationalUnitId: "Organizational unit",
+  status: "Account status",
+  mustChangePassword: "First-login password-change requirement",
+};
+
+export function invalidRequest(response: Response, fields?: string[]) {
+  const invalidFields = [
+    ...new Set(
+      (fields ?? [])
+        .map((field) => userFieldLabels[field])
+        .filter((field): field is string => Boolean(field)),
+    ),
+  ];
+  response.status(400).json({
+    error: invalidFields.length
+      ? `Check these fields: ${invalidFields.join(", ")}.`
+      : "The user-management request is invalid.",
+  });
 }
 
 export function getActorId(request: Request) {

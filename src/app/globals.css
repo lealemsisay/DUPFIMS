@@ -1433,6 +1433,53 @@ a {
   font-size: 11px;
 }
 
+.user-delegation-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  border: 1px solid #e3ebe6;
+  border-radius: 4px;
+  padding: 13px;
+  background: #f9fbfa;
+}
+
+.user-delegation-form h4,
+.user-delegation-form .user-alert,
+.user-delegation-form .user-dialog-actions {
+  grid-column: 1 / -1;
+}
+
+.user-delegation-form h4 {
+  margin: 0;
+  color: #43574b;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.user-delegation-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #53645b;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+}
+
+.user-delegation-form input,
+.user-delegation-form select {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #dce5e0;
+  border-radius: 4px;
+  padding: 7px;
+  background: #fff;
+  color: #34463d;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1712,6 +1759,16 @@ a {
 
   .user-history-list li {
     grid-template-columns: 1fr;
+  }
+
+  .user-delegation-form {
+    grid-template-columns: 1fr;
+  }
+
+  .user-delegation-form h4,
+  .user-delegation-form .user-alert,
+  .user-delegation-form .user-dialog-actions {
+    grid-column: auto;
   }
 
   .user-history-list time {

@@ -127,17 +127,34 @@ example files or client-side code.
 - Supported role catalog includes separate records for each University Vice
   President seat; notifications and dashboard metrics remain permission- and
   account-scoped
-- System Administrators cannot assign the Peace Forum President role because
-  it grants global confidential-case access; that assignment requires an
-  authorized Peace Forum leadership workflow. A President's Representative
-  receives case scope only through an active campus delegation, not a regular
-  campus assignment.
+- System Administrator navigation and dashboard are limited to Dashboard,
+  User Management, Campus Management, My Profile, and Logout. Its dashboard
+  reports account counts, campus count, audited account/campus activity, and
+  database connectivity without querying student, case, submission, message,
+  or notification records
+- System Administrators can provision one Peace Forum President and the
+  appointed Peace Forum and university leadership roles. Peace Forum
+  Presidents can manage only representative and organizational-unit accounts.
+  The backend scopes list, detail, edit, role, status, and reset operations to
+  the manager's authority; neither manager may change their own role
+- Peace Forum President permissions include authorized case oversight,
+  submission review, and executive-account management. University Vice
+  President seats use independent role records and personal user inboxes; a
+  portfolio-specific permission matrix requires official portfolio decisions
+- Representative delegations are granted by the Peace Forum President for a
+  selected campus and explicit start/end times; revocations and grants are
+  retained in the audit history. Delegation access checks exclude revoked and
+  expired grants
+- Campus Management supports create, edit, activate, and deactivate actions.
+  Deactivation never deletes historical student or case records, and the
+  technical administration interface does not expose record counts
 - Responsive client-side dashboard navigation with separate routes for
   students, cases, information, notifications, messages, reports, users,
   campuses, settings, and profile
 - Existing module routes render clearly marked under-development states where
-  no module API or workflow exists; navigation does not imply those functions
-  are implemented
+  no module API or workflow exists; student, case, and information API paths
+  enforce role permissions and return an explicit not-implemented response
+  for authorized requests rather than simulated records or success responses
 - Dashboard metrics, campus rows, notifications, and recent activity entries
   link to their corresponding modules
 - Initial-account creation and login require the local PostgreSQL database and
@@ -154,8 +171,10 @@ modules are intentionally not implemented in Phase 1.
 
 ## User management API
 
-The authenticated System Administrator can use the following PostgreSQL-backed
-endpoints after completing the first-login password change:
+The System Administrator can provision the initial institutional appointments;
+the Peace Forum President can manage only Peace Forum representatives and unit
+members. Both use the following PostgreSQL-backed endpoints after completing
+the first-login password change, with server-side role-scoped account access:
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -168,6 +187,25 @@ endpoints after completing the first-login password change:
 | `PATCH` | `/api/users/:id/role` | Change the assigned supported role |
 | `PATCH` | `/api/users/:id/status` | Activate, deactivate, or suspend an account |
 | `POST` | `/api/users/:id/reset-password` | Reset credentials and require a first-login change |
+| `GET` | `/api/users/:id/delegations` | Peace Forum President: view representative delegations |
+| `POST` | `/api/users/:id/delegations` | Peace Forum President: grant a campus/time-bounded delegation |
+| `DELETE` | `/api/users/:id/delegations/:delegationId` | Peace Forum President: revoke a delegation |
+
+System Administrator-only campus endpoints:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/campuses` | List technical campus records |
+| `POST` | `/api/campuses` | Create campus |
+| `PUT` | `/api/campuses/:id` | Edit campus identifier/name |
+| `PATCH` | `/api/campuses/:id/status` | Activate/deactivate without deleting history |
+| `GET` | `/api/system/health` | Check application database connectivity |
+
+The System Administrator receives no `student:read`, `case:read`,
+`case:manage`, `information:read`, `information:manage`, `messages:read`, or
+`notifications:read` permission. Authenticated case and information API
+requests are permission-guarded; the data workflows themselves remain
+unimplemented and authorized requests return HTTP 501.
 
 The migration adds normalized case-insensitive username/email uniqueness,
 account contact and last-login fields, a protected-account marker, and the

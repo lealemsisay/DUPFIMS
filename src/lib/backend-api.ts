@@ -40,6 +40,19 @@ export type DashboardMetrics = {
     createdAt: Date;
     readAt: Date | null;
   }>;
+  systemAdmin?: {
+    totalUsers: number;
+    activeUsers: number;
+    suspendedUsers: number;
+    totalCampuses: number;
+    databaseConnected: boolean;
+    recentAdminActivities: Array<{
+      id: string;
+      action: string;
+      entityType: string;
+      createdAt: Date;
+    }>;
+  };
 };
 
 async function backendFetch(path: string) {
@@ -79,6 +92,17 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
         readAt: string | null;
       }
     >;
+    systemAdmin?: Omit<
+      NonNullable<DashboardMetrics["systemAdmin"]>,
+      "recentAdminActivities"
+    > & {
+      recentAdminActivities: Array<
+        Omit<
+          NonNullable<DashboardMetrics["systemAdmin"]>["recentAdminActivities"][number],
+          "createdAt"
+        > & { createdAt: string }
+      >;
+    };
   };
 
   return {
@@ -92,5 +116,17 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       createdAt: new Date(notification.createdAt),
       readAt: notification.readAt ? new Date(notification.readAt) : null,
     })),
+    ...(data.systemAdmin
+      ? {
+          systemAdmin: {
+            ...data.systemAdmin,
+            recentAdminActivities:
+              data.systemAdmin.recentAdminActivities.map((activity) => ({
+                ...activity,
+                createdAt: new Date(activity.createdAt),
+              })),
+          },
+        }
+      : {}),
   };
 }

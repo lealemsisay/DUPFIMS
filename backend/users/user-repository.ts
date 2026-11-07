@@ -1,5 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
+import {
+  exclusiveRoleNames,
+  managedRoleNamesFor,
+  type UserManagerRole,
+} from "./assignable-roles";
+
+export class ExclusiveRoleAlreadyAssignedError extends Error {
+  constructor(roleName: string) {
+    super(`The ${roleName} role is already assigned to an account.`);
+    this.name = "ExclusiveRoleAlreadyAssignedError";
+  }
+}
 
 const userSelect = {
   id: true,
@@ -41,6 +53,7 @@ export type CreateUserRecord = {
 };
 
 export async function listUsers(
+  actorRole: UserManagerRole,
   filters: {
     search?: string;
     roleId?: string;
@@ -51,9 +64,23 @@ export async function listUsers(
   pageSize: number,
 ) {
   const where: Prisma.UserWhereInput = {
+    roles: {
+      some: {
+        role: { name: { in: [...managedRoleNamesFor(actorRole)] } },
+      },
+    },
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.roleId
-      ? { roles: { some: { roleId: filters.roleId } } }
+      ? {
+          AND: [
+            {
+              roles: {
+                some: { role: { name: { in: [...managedRoleNamesFor(actorRole)] } } },
+              },
+            },
+            { roles: { some: { roleId: filters.roleId } } },
+          ],
+        }
       : {}),
     ...(filters.campusId
       ? { campuses: { some: { campusId: filters.campusId } } }
@@ -139,6 +166,16 @@ export async function createUserRecord(
   user: CreateUserRecord,
 ) {
   return prisma.$transaction(async (transaction) => {
+    if ((exclusiveRoleNames as readonly string[]).includes(user.roleName)) {
+      const existingRoleAssignment = await transaction.userRole.count({
+        where: {
+          roleId: user.roleId,
+        },
+      });
+      if (existingRoleAssignment > 0) {
+        throw new ExclusiveRoleAlreadyAssignedError(user.roleName);
+      }
+    }
     const created = await transaction.user.create({
       data: {
         username: user.username,
@@ -183,7 +220,7 @@ export async function createUserRecord(
       },
     });
     return created;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function updateUserRecord(
@@ -254,6 +291,14 @@ export async function changeUserRole(
   organizationalUnitId: string | null,
 ) {
   return prisma.$transaction(async (transaction) => {
+    if ((exclusiveRoleNames as readonly string[]).includes(roleName)) {
+      const existingRoleAssignment = await transaction.userRole.count({
+        where: { roleId, userId: { not: userId } },
+      });
+      if (existingRoleAssignment > 0) {
+        throw new ExclusiveRoleAlreadyAssignedError(roleName);
+      }
+    }
     await transaction.userRole.deleteMany({ where: { userId } });
     await transaction.userRole.create({ data: { userId, roleId } });
     await transaction.userOrganizationalUnit.deleteMany({ where: { userId } });
@@ -275,7 +320,7 @@ export async function changeUserRole(
       where: { id: userId },
       select: userSelect,
     });
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function changeUserStatus(
@@ -347,5 +392,113 @@ export function getUserAudit(userId: string) {
     },
     orderBy: { createdAt: "desc" },
     take: 100,
+  });
+}
+
+export function listUserDelegations(userId: string) {
+  return prisma.delegation.findMany({
+    where: { delegateId: userId },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      revokedAt: true,
+      campus: { select: { id: true, name: true, code: true } },
+      grantor: { select: { fullName: true, username: true } },
+    },
+    orderBy: { startsAt: "desc" },
+  });
+}
+
+export async function createUserDelegation(
+  actorId: string,
+  userId: string,
+  campusId: string,
+  startsAt: Date,
+  endsAt: Date,
+) {
+  return prisma.$transaction(async (transaction) => {
+    const delegation = await transaction.delegation.create({
+      data: {
+        grantorId: actorId,
+        delegateId: userId,
+        campusId,
+        startsAt,
+        endsAt,
+      },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        revokedAt: true,
+        campus: { select: { id: true, name: true, code: true } },
+        grantor: { select: { fullName: true, username: true } },
+      },
+    });
+    await transaction.auditLog.createMany({
+      data: [
+        {
+          actorId,
+          campusId,
+          action: "DELEGATION_CREATED",
+          entityType: "Delegation",
+          entityId: delegation.id,
+          detail: { delegateId: userId, startsAt, endsAt },
+        },
+        {
+          actorId,
+          campusId,
+          action: "REPRESENTATIVE_DELEGATED",
+          entityType: "User",
+          entityId: userId,
+          detail: {
+            delegationId: delegation.id,
+            campus: delegation.campus.name,
+            startsAt,
+            endsAt,
+          },
+        },
+      ],
+    });
+    return delegation;
+  });
+}
+
+export async function revokeUserDelegation(
+  actorId: string,
+  userId: string,
+  delegationId: string,
+) {
+  return prisma.$transaction(async (transaction) => {
+    const existing = await transaction.delegation.findFirst({
+      where: { id: delegationId, delegateId: userId, revokedAt: null },
+      select: { campusId: true },
+    });
+    if (!existing) return false;
+    await transaction.delegation.update({
+      where: { id: delegationId },
+      data: { revokedAt: new Date() },
+    });
+    await transaction.auditLog.createMany({
+      data: [
+        {
+          actorId,
+          campusId: existing.campusId,
+          action: "DELEGATION_REVOKED",
+          entityType: "Delegation",
+          entityId: delegationId,
+          detail: { delegateId: userId },
+        },
+        {
+          actorId,
+          campusId: existing.campusId,
+          action: "REPRESENTATIVE_DELEGATION_REVOKED",
+          entityType: "User",
+          entityId: userId,
+          detail: { delegationId },
+        },
+      ],
+    });
+    return true;
   });
 }

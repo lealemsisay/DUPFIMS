@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { UserManagement } from "@/components/user-management";
+import { CampusManagement } from "@/components/campus-management";
 import { getAppSession } from "@/lib/backend-api";
 
 const modulePermissions: Record<string, string> = {
@@ -106,7 +107,15 @@ export default async function DashboardModulePage({
     notFound();
   }
 
-  if (module === "users") return <UserManagement />;
+  if (module === "users") {
+    const managerRole = session.user.roles.find(
+      (role) =>
+        role === "System Administrator" || role === "Peace Forum President",
+    );
+    if (!managerRole) notFound();
+    return <UserManagement managerRole={managerRole} />;
+  }
+  if (module === "campuses") return <CampusManagement />;
 
   const Icon = page.icon;
 
