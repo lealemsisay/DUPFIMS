@@ -10,6 +10,7 @@ datasource db {
 enum UserStatus {
   ACTIVE
   INACTIVE
+  SUSPENDED
   LOCKED
 }
 
@@ -32,9 +33,12 @@ model User {
   username            String                   @unique
   email               String?                  @unique
   fullName            String
+  phoneNumber         String?
   passwordHash        String
   status              UserStatus               @default(ACTIVE)
   mustChangePassword  Boolean                  @default(true)
+  isProtectedAccount  Boolean                  @default(false)
+  lastLoginAt         DateTime?
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   roles               UserRole[]

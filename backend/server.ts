@@ -10,6 +10,7 @@ import { hashPassword, verifyPassword } from "../src/lib/password";
 import { getDashboardMetrics } from "../src/lib/services/dashboard";
 import { loginSchema, changePasswordSchema } from "../src/lib/validations/auth";
 import { prisma } from "./prisma";
+import { createUserRouter } from "./users/user-routes";
 
 config({ path: resolve(process.cwd(), ".env"), override: true });
 config({ path: resolve(process.cwd(), "backend", ".env") });
@@ -91,6 +92,18 @@ async function requireSession(
             fullName: true,
             status: true,
             mustChangePassword: true,
+            roles: {
+              select: {
+                role: {
+                  select: {
+                    name: true,
+                    permissions: {
+                      select: { permission: { select: { key: true } } },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -112,6 +125,10 @@ async function requireSession(
       email: session.user.email,
       fullName: session.user.fullName,
       mustChangePassword: session.user.mustChangePassword,
+      roles: session.user.roles.map(({ role }) => ({
+        name: role.name,
+        permissions: role.permissions.map(({ permission }) => permission.key),
+      })),
     };
     next();
   } catch (error) {
@@ -174,6 +191,11 @@ app.post(
         return;
       }
 
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
       const token = randomBytes(32).toString("base64url");
       await prisma.userSession.create({
         data: {
@@ -225,6 +247,14 @@ app.get("/api/auth/session", requireSession, (request, response) => {
       email: request.authenticatedUser?.email,
       name: request.authenticatedUser?.fullName,
       mustChangePassword: request.authenticatedUser?.mustChangePassword,
+      roles: request.authenticatedUser?.roles.map(({ name }) => name) ?? [],
+      permissions: [
+        ...new Set(
+          request.authenticatedUser?.roles.flatMap(
+            ({ permissions }) => permissions,
+          ) ?? [],
+        ),
+      ],
     },
   });
 });
@@ -287,6 +317,15 @@ app.post(
       next(error);
     }
   },
+);
+
+app.use(
+  "/api/users",
+  createUserRouter({
+    requireSession,
+    requirePasswordChanged,
+    requireSameOrigin,
+  }),
 );
 
 app.get(

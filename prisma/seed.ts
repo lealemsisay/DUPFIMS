@@ -175,6 +175,15 @@ const roleDefinitions = [
   },
 ];
 
+const organizationalUnitNames = [
+  "Peace Values Education",
+  "Women Affairs",
+  "Media and Communication",
+  "Rapid Response and Early Warning",
+  "Command Post",
+  "Campus Police",
+];
+
 async function main() {
   const initialAdmin = initialAdminSchema.safeParse({
     name: process.env.INITIAL_ADMIN_NAME,
@@ -227,6 +236,14 @@ async function main() {
     });
   }
 
+  for (const name of organizationalUnitNames) {
+    await prisma.organizationalUnit.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+  }
+
   const systemAdministrator = await prisma.role.findUniqueOrThrow({
     where: { name: "System Administrator" },
   });
@@ -251,6 +268,10 @@ async function main() {
       );
     }
     adminUserId = existing.id;
+    await prisma.user.update({
+      where: { id: adminUserId },
+      data: { isProtectedAccount: true },
+    });
   } else {
     const adminUser = await prisma.user.create({
       data: {
@@ -260,6 +281,7 @@ async function main() {
         passwordHash: await hashPassword(password),
         status: "ACTIVE",
         mustChangePassword: true,
+        isProtectedAccount: true,
       },
       select: { id: true },
     });

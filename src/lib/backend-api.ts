@@ -10,6 +10,8 @@ export type AppSession = {
     email: string | null;
     name: string;
     mustChangePassword: boolean;
+    roles: string[];
+    permissions: string[];
   };
 };
 

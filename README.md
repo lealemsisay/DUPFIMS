@@ -11,8 +11,8 @@ serif typography, compact account panel, and supplied Dilla University logo.
 - Standalone Express and TypeScript backend API
 - Tailwind CSS 4 and Lucide React
 - PostgreSQL with Prisma
-- Auth.js credentials authentication with bcrypt password hashes and JWT
-  sessions
+- Backend credentials authentication with bcrypt password hashes and opaque,
+  revocable database sessions
 - Zod and React Hook Form for login validation
 
 ## Requirements
@@ -106,7 +106,7 @@ example files or client-side code.
   verification and hashed, revocable session tokens
 - First-login password change at `/api/auth/change-password`; password-change
   requirements protect the dashboard and permission-guarded APIs
-- Hashed-password verification and an 8-hour server-side Auth.js session
+- Hashed-password verification and an 8-hour server-side session
 - Protected dashboard route and a protected, uncached metrics API
 - PostgreSQL-backed dashboard metrics, campus scoping, role permissions, and
   empty states; inaccessible metrics display as restricted
@@ -114,8 +114,32 @@ example files or client-side code.
   disciplinary cases, information submissions, messages, notifications,
   audit logs, organizational units, and time-bounded campus delegations
 - Idempotent role/permission and initial administrator seed; no demo data
-- Responsive dashboard navigation; modules outside Phase 1 are visibly
-  disabled rather than linking to non-existent pages
+- Database-backed System Administrator user management for account creation,
+  profile updates, role changes, campus/unit assignments, activation,
+  suspension, password resets, search/filter/pagination, and per-account audit
+  history
+- Server-enforced user-management authorization; password hashes are omitted
+  from API responses, changes are audited transactionally, and account
+  mutations revoke sessions where needed
+- Initial administrator account is protected from user-management edits,
+  role changes, deactivation, and password resets; users cannot change their
+  own role or status
+- Supported role catalog includes separate records for each University Vice
+  President seat; notifications and dashboard metrics remain permission- and
+  account-scoped
+- System Administrators cannot assign the Peace Forum President role because
+  it grants global confidential-case access; that assignment requires an
+  authorized Peace Forum leadership workflow. A President's Representative
+  receives case scope only through an active campus delegation, not a regular
+  campus assignment.
+- Responsive client-side dashboard navigation with separate routes for
+  students, cases, information, notifications, messages, reports, users,
+  campuses, settings, and profile
+- Existing module routes render clearly marked under-development states where
+  no module API or workflow exists; navigation does not imply those functions
+  are implemented
+- Dashboard metrics, campus rows, notifications, and recent activity entries
+  link to their corresponding modules
 - Initial-account creation and login require the local PostgreSQL database and
   values in the ignored `backend/.env`; do not run the seed until those are
   configured
@@ -127,3 +151,28 @@ applied without database-backed verification. Reassess this before production.
 
 Firebase notification and storage integrations and the remaining application
 modules are intentionally not implemented in Phase 1.
+
+## User management API
+
+The authenticated System Administrator can use the following PostgreSQL-backed
+endpoints after completing the first-login password change:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/users/options` | Roles, active campuses, and organizational units |
+| `GET` | `/api/users` | Search, filter, and paginate accounts |
+| `POST` | `/api/users` | Create an account with a bcrypt-hashed initial password |
+| `GET` | `/api/users/:id` | View account details |
+| `GET` | `/api/users/:id/audit` | View immutable account history |
+| `PUT` | `/api/users/:id` | Update profile and campus/unit assignment |
+| `PATCH` | `/api/users/:id/role` | Change the assigned supported role |
+| `PATCH` | `/api/users/:id/status` | Activate, deactivate, or suspend an account |
+| `POST` | `/api/users/:id/reset-password` | Reset credentials and require a first-login change |
+
+The migration adds normalized case-insensitive username/email uniqueness,
+account contact and last-login fields, a protected-account marker, and the
+suspended status. It is applied through Prisma migrations; no schema reset is
+required.
+
+The black Next.js icon shown in the lower-left corner during development is
+the Next.js Dev Tools indicator, not a DUPFIMS status or control.

@@ -8,6 +8,10 @@ declare module "express-serve-static-core" {
       email: string | null;
       fullName: string;
       mustChangePassword: boolean;
+      roles: Array<{
+        name: string;
+        permissions: string[];
+      }>;
     };
     sessionId?: string;
   }

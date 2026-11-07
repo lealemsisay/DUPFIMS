@@ -38,6 +38,7 @@ export async function getDashboardMetrics(userId: string) {
   );
 
   if (isRepresentative && !canViewAllCampuses) {
+    campusIds.clear();
     const now = new Date();
     const delegations = await prisma.delegation.findMany({
       where: {
@@ -77,15 +78,15 @@ export async function getDashboardMetrics(userId: string) {
     notifications,
   ] =
     await Promise.all([
-      canReadStudents
+      canReadStudents && accessibleCampusIds.length > 0
         ? prisma.student.count({ where: { campusId: campusFilter } })
         : Promise.resolve(null),
-      canReadCases
+      canReadCases && accessibleCampusIds.length > 0
         ? prisma.disciplinaryCase.count({
             where: { campusId: campusFilter },
           })
         : Promise.resolve(null),
-      canReadCases
+      canReadCases && accessibleCampusIds.length > 0
         ? prisma.disciplinaryCase.count({
             where: {
               campusId: campusFilter,
@@ -98,7 +99,7 @@ export async function getDashboardMetrics(userId: string) {
             },
           })
         : Promise.resolve(null),
-      canReadCases
+      canReadCases && accessibleCampusIds.length > 0
         ? prisma.disciplinaryCase.count({
             where: {
               campusId: campusFilter,
@@ -106,7 +107,7 @@ export async function getDashboardMetrics(userId: string) {
             },
           })
         : Promise.resolve(null),
-      canReadInformation
+      canReadInformation && accessibleCampusIds.length > 0
         ? prisma.informationSubmission.count({
             where: {
               campusId: campusFilter,
@@ -132,18 +133,20 @@ export async function getDashboardMetrics(userId: string) {
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
-      prisma.notification.findMany({
-        where: { recipientId: userId },
-        select: {
-          id: true,
-          title: true,
-          message: true,
-          createdAt: true,
-          readAt: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
+      permissionKeys.has("notifications:read")
+        ? prisma.notification.findMany({
+            where: { recipientId: userId },
+            select: {
+              id: true,
+              title: true,
+              message: true,
+              createdAt: true,
+              readAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          })
+        : Promise.resolve([]),
     ]);
 
   const studentCounts = new Map<string, number>();

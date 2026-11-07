@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAppSession, getDashboardMetrics } from "@/lib/backend-api";
 
@@ -20,24 +21,91 @@ export default async function DashboardPage() {
   if (session.user.mustChangePassword) redirect("/change-password");
 
   const metrics = await getDashboardMetrics();
+  const primaryRole = session.user.roles[0] ?? "Peace Forum member";
+  const dashboardIntro: Record<string, string> = {
+    "Peace Forum President":
+      "Organization-wide Peace Forum oversight across authorized campuses.",
+    "Peace Forum Vice President":
+      "Peace Forum leadership responsibilities and authorized information.",
+    Secretary:
+      "Coordination, records, and reporting available to your account.",
+    "President's Representative":
+      "Delegated campus responsibilities and authorized information.",
+    "University President":
+      "Institutional overview of information authorized for your office.",
+    "University Vice President 1":
+      "University Vice President 1 workspace and personal notification inbox.",
+    "University Vice President 2":
+      "University Vice President 2 workspace and personal notification inbox.",
+    "University Vice President 3":
+      "University Vice President 3 workspace and personal notification inbox.",
+    "University Vice President 4":
+      "University Vice President 4 workspace and personal notification inbox.",
+    "University Vice President 5":
+      "University Vice President 5 workspace and personal notification inbox.",
+    "President's Office Staff":
+      "Authorized office workflows and forwarded information.",
+    "System Administrator":
+      "Technical administration and account management. Confidential case records are not available to this role.",
+  };
   const metricCards = [
-    { label: "Registered students", value: metrics.students, icon: UsersRound },
-    { label: "Disciplinary cases", value: metrics.cases, icon: ShieldAlert },
-    { label: "Open cases", value: metrics.openCases, icon: FileClock },
-    { label: "Resolved cases", value: metrics.resolvedCases, icon: ClipboardCheck },
+    {
+      label: "Registered students",
+      value: metrics.students,
+      icon: UsersRound,
+      href: "/dashboard/students",
+    },
+    {
+      label: "Disciplinary cases",
+      value: metrics.cases,
+      icon: ShieldAlert,
+      href: "/dashboard/cases",
+    },
+    {
+      label: "Open cases",
+      value: metrics.openCases,
+      icon: FileClock,
+      href: "/dashboard/cases?status=OPEN",
+    },
+    {
+      label: "Resolved cases",
+      value: metrics.resolvedCases,
+      icon: ClipboardCheck,
+      href: "/dashboard/cases?status=RESOLVED",
+    },
     {
       label: "Pending submissions",
       value: metrics.pendingSubmissions,
       icon: Bell,
+      href: "/dashboard/information?status=PENDING",
     },
   ];
+
+  function activityHref(entityType: string) {
+    const type = entityType.toLocaleLowerCase("en-US");
+    if (type.includes("student")) return "/dashboard/students";
+    if (type.includes("case") || type.includes("disciplin")) {
+      return "/dashboard/cases";
+    }
+    if (type.includes("submission") || type.includes("information")) {
+      return "/dashboard/information";
+    }
+    if (type.includes("notification")) return "/dashboard/notifications";
+    if (type.includes("message")) return "/dashboard/messages";
+    if (type.includes("campus")) return "/dashboard/campuses";
+    if (type.includes("user") || type.includes("account")) {
+      return "/dashboard/users";
+    }
+    if (type.includes("setting")) return "/dashboard/settings";
+    return "/dashboard/reports";
+  }
 
   return (
     <>
       <div className="dashboard-welcome">
         <div>
-          <h1>Dashboard</h1>
-          <p>Peace Forum overview for the campuses you are authorized to access.</p>
+          <h1>{primaryRole} Dashboard</h1>
+          <p>{dashboardIntro[primaryRole] ?? `${primaryRole} workspace and authorized responsibilities.`}</p>
         </div>
         <div className="dashboard-period">
           <CalendarDays aria-hidden="true" size={14} />
@@ -46,8 +114,9 @@ export default async function DashboardPage() {
       </div>
 
       <section className="metric-grid" aria-label="University overview">
-        {metricCards.map(({ label, value, icon: Icon }) => (
-          <article className="metric-card" key={label}>
+        {metricCards.map(({ label, value, icon: Icon, href }) => {
+          const content = (
+            <>
             <span className="metric-label">
               <Icon
                 aria-hidden="true"
@@ -59,8 +128,21 @@ export default async function DashboardPage() {
             <strong className={value === null ? "metric-value metric-restricted" : "metric-value"}>
               {value === null ? "Restricted" : value.toLocaleString()}
             </strong>
-          </article>
-        ))}
+            </>
+          );
+          return value === null ? (
+            <div className="metric-card" key={label}>{content}</div>
+          ) : (
+            <Link
+              className="metric-card metric-card-link"
+              href={href}
+              key={label}
+              aria-label={`Open ${label}`}
+            >
+              {content}
+            </Link>
+          );
+        })}
       </section>
 
       <div className="dashboard-sections">
@@ -76,11 +158,18 @@ export default async function DashboardPage() {
                 No campus access is assigned to this account yet. Contact a
                 system administrator to request an assignment.
               </p>
+              <Link className="module-action-link" href="/dashboard/campuses">
+                Open campus management
+              </Link>
             </div>
           ) : (
             <div className="campus-list">
               {metrics.campuses.map((campus) => (
-                <div className="campus-row" key={campus.id}>
+                <Link
+                  className="campus-row campus-row-link"
+                  href={`/dashboard/campuses?campus=${encodeURIComponent(campus.id)}`}
+                  key={campus.id}
+                >
                   <strong>{campus.name}</strong>
                   <span className="campus-counts">
                     {campus.code} ·{" "}
@@ -88,7 +177,7 @@ export default async function DashboardPage() {
                       ? "student data restricted"
                       : `${campus.students} students`}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -99,7 +188,12 @@ export default async function DashboardPage() {
             <h2 id="notifications-title">Notifications</h2>
             <span>{metrics.notifications.length} recent</span>
           </div>
-          {metrics.notifications.length === 0 ? (
+          {!session.user.permissions.includes("notifications:read") ? (
+            <div className="empty-state">
+              <Bell aria-hidden="true" size={25} />
+              <p>Your role does not include notification access.</p>
+            </div>
+          ) : metrics.notifications.length === 0 ? (
             <div className="empty-state">
               <Bell aria-hidden="true" size={25} />
               <p>You have no notifications.</p>
@@ -107,7 +201,11 @@ export default async function DashboardPage() {
           ) : (
             <div className="activity-list">
               {metrics.notifications.map((notification) => (
-                <article className="activity-row" key={notification.id}>
+                <Link
+                  className="activity-row activity-row-link"
+                  href="/dashboard/notifications"
+                  key={notification.id}
+                >
                   <span className="activity-dot" aria-hidden="true" />
                   <div className="activity-copy">
                     <p>
@@ -119,7 +217,7 @@ export default async function DashboardPage() {
                       {notification.readAt ? "" : " · Unread"}
                     </time>
                   </div>
-                </article>
+                </Link>
               ))}
             </div>
           )}
@@ -138,7 +236,11 @@ export default async function DashboardPage() {
           ) : (
             <div className="activity-list">
               {metrics.activities.map((activity) => (
-                <article className="activity-row" key={activity.id}>
+                <Link
+                  className="activity-row activity-row-link"
+                  href={activityHref(activity.entityType)}
+                  key={activity.id}
+                >
                   <span className="activity-dot" aria-hidden="true" />
                   <div className="activity-copy">
                     <p>
@@ -148,7 +250,7 @@ export default async function DashboardPage() {
                       {activity.createdAt.toLocaleString()}
                     </time>
                   </div>
-                </article>
+                </Link>
               ))}
             </div>
           )}
