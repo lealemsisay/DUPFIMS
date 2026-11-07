@@ -14,6 +14,9 @@ import {
 import { redirect } from "next/navigation";
 import { UserManagement } from "@/components/user-management";
 import { CampusManagement } from "@/components/campus-management";
+import { AccountRequestWorkspace } from "@/components/account-request-workspace";
+import { AccountApprovalWorkspace } from "@/components/account-approval-workspace";
+import { NotificationsWorkspace } from "@/components/notifications-workspace";
 import { getAppSession } from "@/lib/backend-api";
 
 const modulePermissions: Record<string, string> = {
@@ -23,7 +26,9 @@ const modulePermissions: Record<string, string> = {
   notifications: "notifications:read",
   messages: "messages:read",
   reports: "reports:read",
-  users: "users:manage",
+  users: "users:read",
+  "account-requests": "users:request",
+  "account-approvals": "users:approve",
   campuses: "campuses:manage",
   settings: "settings:manage",
 };
@@ -71,6 +76,16 @@ const modules = {
       "User accounts, role assignments, and account-management actions will be available here.",
     icon: UsersRound,
   },
+  "account-requests": {
+    title: "Account Requests",
+    description: "Submit and track approval of requested accounts.",
+    icon: UsersRound,
+  },
+  "account-approvals": {
+    title: "Account Approval",
+    description: "Review pending account requests.",
+    icon: UsersRound,
+  },
   campuses: {
     title: "Campus Management",
     description:
@@ -112,10 +127,16 @@ export default async function DashboardModulePage({
       (role) =>
         role === "System Administrator" || role === "Peace Forum President",
     );
-    if (!managerRole) notFound();
-    return <UserManagement managerRole={managerRole} />;
+    if (managerRole) return <UserManagement managerRole={managerRole} />;
+    return <AccountRequestWorkspace />;
+  }
+  if (module === "account-requests") return <AccountRequestWorkspace />;
+  if (module === "account-approvals") {
+    if (!session.user.roles.includes("Peace Forum President")) notFound();
+    return <AccountApprovalWorkspace />;
   }
   if (module === "campuses") return <CampusManagement />;
+  if (module === "notifications") return <NotificationsWorkspace />;
 
   const Icon = page.icon;
 

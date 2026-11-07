@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "DUPFIMS | Dilla University",
   description:
     "Dilla University Peace Forum Information Management System",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

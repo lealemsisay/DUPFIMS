@@ -62,7 +62,21 @@ serif typography, compact account panel, and supplied Dilla University logo.
    account or replace its password. The administrator receives no
    disciplinary-case permissions by default.
 
-6. Start the frontend and backend in separate VS Code terminals:
+6. Provision the initial Peace Forum President, Vice President, and Secretary
+   using separate credentials from `backend/.env`, then run:
+
+   ```powershell
+   npm run db:provision-leadership
+   ```
+
+   For each role not already provisioned, set its `INITIAL_PEACE_FORUM_PRESIDENT_*`,
+   `INITIAL_PEACE_FORUM_VICE_PRESIDENT_*`, or `INITIAL_PEACE_FORUM_SECRETARY_*`
+   name, username, email, and password variables. For a first bootstrap, set
+   all three groups. Existing role accounts may be omitted and are never
+   overwritten. Passwords are bcrypt-hashed, never returned by APIs, and must
+   be changed at first login.
+
+7. Start the frontend and backend in separate VS Code terminals:
 
    ```powershell
    npm run dev:backend
@@ -91,6 +105,11 @@ serif typography, compact account panel, and supplied Dilla University logo.
 | `INITIAL_ADMIN_USERNAME` | Initial administrator username, in `backend/.env` |
 | `INITIAL_ADMIN_EMAIL` | Optional initial administrator email, in `backend/.env` |
 | `INITIAL_ADMIN_PASSWORD` | Initial login password, in `backend/.env` |
+| `INITIAL_PEACE_FORUM_PRESIDENT_*` | Initial President name, username, email, and password |
+| `INITIAL_PEACE_FORUM_VICE_PRESIDENT_*` | Initial Vice President name, username, email, and password |
+| `INITIAL_PEACE_FORUM_SECRETARY_*` | Initial Secretary name, username, email, and password |
+| `PEACE_FORUM_PRESIDENT_SUCCESSION_FROM` | Existing President username for controlled succession |
+| `PEACE_FORUM_PRESIDENT_SUCCESSION_REASON` | Required operational reason for controlled succession |
 | `BACKEND_PORT` | Backend API port, default `4000`, in `backend/.env` |
 | `FRONTEND_ORIGINS` | Allowed frontend origins, in `backend/.env` |
 
@@ -114,10 +133,28 @@ example files or client-side code.
   disciplinary cases, information submissions, messages, notifications,
   audit logs, organizational units, and time-bounded campus delegations
 - Idempotent role/permission and initial administrator seed; no demo data
-- Database-backed System Administrator user management for account creation,
+- Database-backed System Administrator user management for approved-account
   profile updates, role changes, campus/unit assignments, activation,
   suspension, password resets, search/filter/pagination, and per-account audit
   history
+- Database-backed account approval workflow: the Peace Forum President, Vice
+  President, and Secretary may submit account requests; only the Peace Forum
+  President may approve, reject, or return them. Requests are not login
+  accounts until approved. Approval, account creation, notifications, and
+  audit entries are committed transactionally, and initial passwords are
+  bcrypt-hashed
+- Account Approval and Account Requests navigation is permission-gated.
+  Requesters can see their request status and the authorized approved-account
+  directory; the System Administrator cannot submit or approve requests
+- Permission-filtered three-dot menus are used for implemented campus, user,
+  account-request, approval, and notification record actions. Student, case,
+  information, messaging, and reports remain explicit placeholders where the
+  corresponding data workflows do not yet exist; no decorative actions are
+  shown for those pages
+- Initial leadership provisioning is a protected environment-driven Prisma
+  command. President succession is a separate privileged operator procedure
+  requiring an explicit incumbent username and reason; it deactivates the
+  predecessor, revokes sessions, and writes audit entries transactionally
 - Server-enforced user-management authorization; password hashes are omitted
   from API responses, changes are audited transactionally, and account
   mutations revoke sessions where needed
@@ -132,11 +169,11 @@ example files or client-side code.
   reports account counts, campus count, audited account/campus activity, and
   database connectivity without querying student, case, submission, message,
   or notification records
-- System Administrators can provision one Peace Forum President and the
-  appointed Peace Forum and university leadership roles. Peace Forum
-  Presidents can manage only representative and organizational-unit accounts.
-  The backend scopes list, detail, edit, role, status, and reset operations to
-  the manager's authority; neither manager may change their own role
+- The System Administrator cannot create or approve accounts. New account
+  creation is available only through the Peace Forum leadership request and
+  approval workflow; the backend rejects the former direct-create endpoint.
+  Account visibility and management operations remain scoped by role, and
+  managers cannot change their own role
 - Peace Forum President permissions include authorized case oversight,
   submission review, and executive-account management. University Vice
   President seats use independent role records and personal user inboxes; a
@@ -171,16 +208,17 @@ modules are intentionally not implemented in Phase 1.
 
 ## User management API
 
-The System Administrator can provision the initial institutional appointments;
-the Peace Forum President can manage only Peace Forum representatives and unit
-members. Both use the following PostgreSQL-backed endpoints after completing
-the first-login password change, with server-side role-scoped account access:
+The following PostgreSQL-backed endpoints require authentication and a
+first-login password change. Account requests do not create a `User` record or
+grant login access until the Peace Forum President approves them. Request
+passwords are hashed before they are stored.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/users/options` | Roles, active campuses, and organizational units |
-| `GET` | `/api/users` | Search, filter, and paginate accounts |
-| `POST` | `/api/users` | Create an account with a bcrypt-hashed initial password |
+| `GET` | `/api/users` | System Administrator / President: search and paginate managed accounts |
+| `GET` | `/api/user-directory` | Approved-account directory, scoped to the logged-in role |
+| `POST` | `/api/users` | Always denied; submit new accounts through `/api/account-requests` |
 | `GET` | `/api/users/:id` | View account details |
 | `GET` | `/api/users/:id/audit` | View immutable account history |
 | `PUT` | `/api/users/:id` | Update profile and campus/unit assignment |
@@ -190,6 +228,14 @@ the first-login password change, with server-side role-scoped account access:
 | `GET` | `/api/users/:id/delegations` | Peace Forum President: view representative delegations |
 | `POST` | `/api/users/:id/delegations` | Peace Forum President: grant a campus/time-bounded delegation |
 | `DELETE` | `/api/users/:id/delegations/:delegationId` | Peace Forum President: revoke a delegation |
+| `GET` | `/api/account-requests/options` | Request roles, active campuses, and organizational units |
+| `GET` | `/api/account-requests` | President: all requests; submitters: their own requests |
+| `POST` | `/api/account-requests` | President, Vice President, or Secretary: submit a request |
+| `GET` | `/api/account-requests/:id` | View a request and its decision history within role scope |
+| `PUT` | `/api/account-requests/:id` | Requester: correct a returned request and resubmit |
+| `POST` | `/api/account-requests/:id/decision` | Peace Forum President: approve, reject, or return with a reason |
+| `GET` | `/api/notifications` | List only the authenticated user's notifications |
+| `PATCH` | `/api/notifications/:id/read` | Mark an owned notification read or unread |
 
 System Administrator-only campus endpoints:
 
@@ -212,5 +258,7 @@ account contact and last-login fields, a protected-account marker, and the
 suspended status. It is applied through Prisma migrations; no schema reset is
 required.
 
-The black Next.js icon shown in the lower-left corner during development is
-the Next.js Dev Tools indicator, not a DUPFIMS status or control.
+The former lower-left “N” badge was Next.js's development indicator. It is
+disabled with the Next.js `devIndicators` configuration. The official
+Dilla University logo is used in circular, non-distorting image containers
+and as the browser favicon.

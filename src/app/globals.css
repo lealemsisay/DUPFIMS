@@ -63,11 +63,13 @@ a {
 }
 
 .brand-crest {
-  width: 43px;
+  width: 45px;
   height: 45px;
-  display: block;
+  display: grid;
   flex: 0 0 auto;
+  place-items: center;
   overflow: hidden;
+  border-radius: 50%;
   background: #fff;
 }
 
@@ -75,9 +77,9 @@ a {
   display: block;
   width: auto;
   height: 100%;
-  max-width: 100%;
-  object-fit: cover;
-  object-position: top;
+  border-radius: 50%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .brand-name {
@@ -240,12 +242,18 @@ a {
   width: 232px;
   height: 230px;
   margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
   overflow: hidden;
+  border-radius: 50%;
+  background: #fff;
 }
 
 .university-mark img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: contain;
 }
 
 .login-card {
@@ -545,6 +553,22 @@ a {
   padding: 25px 15px;
   border-right: 1px solid var(--line);
   background: #fff;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 12px 22px;
+  color: #355444;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sidebar-brand-crest {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e6ece8;
 }
 
 .sidebar-label {
@@ -956,6 +980,7 @@ a {
 .user-primary-button {
   background: var(--du-green);
   color: #fff;
+  text-decoration: none;
 }
 
 .user-primary-button:hover:not(:disabled) {
@@ -1151,6 +1176,22 @@ a {
   color: #96552b;
 }
 
+.user-status-pending_approval,
+.user-status-returned_for_correction {
+  background: #fff8df;
+  color: #8a6b10;
+}
+
+.user-status-approved {
+  background: #e9f5ed;
+  color: #287044;
+}
+
+.user-status-rejected {
+  background: #fff0ef;
+  color: #9f3c35;
+}
+
 .user-row-actions {
   display: flex;
   gap: 4px;
@@ -1171,6 +1212,76 @@ a {
 
 .user-row-actions button:disabled {
   color: #c3cbc6;
+  cursor: not-allowed;
+}
+
+.row-action-menu {
+  position: relative;
+  width: 34px;
+  margin-left: auto;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.row-action-menu > summary {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #64746c;
+  cursor: pointer;
+  list-style: none;
+}
+
+.row-action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.row-action-menu[open] > summary,
+.row-action-menu > summary:hover {
+  border-color: #a9cdb7;
+  background: #f0f7f3;
+  color: var(--du-green-dark);
+}
+
+.row-action-menu-items {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  display: grid;
+  border: 1px solid #dfe8e2;
+  border-radius: 4px;
+  padding: 4px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(28, 49, 37, 0.16);
+}
+
+.row-action-menu-items button {
+  border: 0;
+  border-radius: 3px;
+  padding: 9px 10px;
+  background: transparent;
+  color: #43574b;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-action-menu-items button:hover:not(:disabled) {
+  background: #f2f7f4;
+  color: var(--du-green-dark);
+}
+
+.row-action-menu-items button.is-destructive {
+  color: #9f3c35;
+}
+
+.row-action-menu-items button:disabled {
+  color: #aab4ae;
   cursor: not-allowed;
 }
 
@@ -1261,6 +1372,10 @@ a {
 .user-form,
 .user-detail-content {
   padding: 18px 20px 20px;
+}
+
+.campus-detail-grid {
+  padding: 20px;
 }
 
 .user-form-grid {
@@ -1442,6 +1557,129 @@ a {
   border-radius: 4px;
   padding: 13px;
   background: #f9fbfa;
+}
+
+.account-approval-list {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.account-approval-card {
+  border: 1px solid #e3ebe6;
+  border-radius: 5px;
+  padding: 17px;
+  background: #fff;
+}
+
+.account-approval-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.account-approval-card > header h2 {
+  margin: 0;
+  color: #354a3e;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.account-approval-card > header p {
+  margin: 5px 0 0;
+  color: #748179;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+}
+
+.account-approval-reason {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  color: #53645b;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+}
+
+.account-approval-reason textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid #dce5e0;
+  border-radius: 4px;
+  padding: 9px 10px;
+  color: #34463d;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+.account-approval-history {
+  margin-top: 14px;
+  border-top: 1px solid #edf1ef;
+  padding-top: 12px;
+  color: #52645a;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+}
+
+.account-approval-history summary {
+  cursor: pointer;
+}
+
+.notification-list {
+  display: grid;
+}
+
+.notification-item {
+  display: grid;
+  grid-template-columns: 35px minmax(0, 1fr) 36px;
+  align-items: start;
+  gap: 12px;
+  border-bottom: 1px solid #edf1ef;
+  padding: 16px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.notification-item:last-child {
+  border-bottom: 0;
+}
+
+.notification-item.is-unread {
+  background: #f5faf7;
+}
+
+.notification-item-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f4ec;
+  color: var(--du-green-dark);
+}
+
+.notification-item-content {
+  min-width: 0;
+}
+
+.notification-item-content strong {
+  color: #3a5044;
+  font-size: 12px;
+}
+
+.notification-item-content p {
+  margin: 5px 0;
+  color: #66776e;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.notification-item-content time {
+  color: #8a9690;
+  font-size: 10px;
 }
 
 .user-delegation-form h4,

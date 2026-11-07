@@ -2,7 +2,6 @@ import { hashPassword } from "../../src/lib/password";
 import {
   changeUserRole,
   changeUserStatus,
-  createUserRecord,
   createUserDelegation,
   getAssignableRole,
   getCampus,
@@ -20,7 +19,6 @@ import {
 import type { delegationSchema } from "./delegation-validation";
 import type {
   accountStatusSchema,
-  createUserSchema,
   roleAssignmentSchema,
   updateUserSchema,
   userListQuerySchema,
@@ -29,8 +27,10 @@ import type {
 import type { z } from "zod";
 import {
   managedRoleNamesFor,
+  type UserDirectoryRole,
   type UserManagerRole,
   organizationalUnitRoleNames,
+  visibleRoleNamesFor,
 } from "./assignable-roles";
 
 const organizationalUnitRoles = new Set<string>(organizationalUnitRoleNames);
@@ -45,7 +45,6 @@ export class UserManagementError extends Error {
   }
 }
 
-type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 type ListUsersInput = z.infer<typeof userListQuerySchema>;
 
@@ -127,13 +126,15 @@ async function getMutableUser(
 
 async function getVisibleManagedUser(
   userId: string,
-  actorRole: UserManagerRole,
+  actorRole: UserDirectoryRole,
 ) {
   const user = await getUser(userId);
-  const managedRoleNames = new Set<string>(managedRoleNamesFor(actorRole));
+  const visibleRoleNames = new Set<string>(
+    visibleRoleNamesFor(actorRole),
+  );
   if (
     !user ||
-    !user.roles.some(({ role }) => managedRoleNames.has(role.name))
+    !user.roles.some(({ role }) => visibleRoleNames.has(role.name))
   ) {
     throw new UserManagementError("User account not found.", 404);
   }
@@ -146,7 +147,7 @@ export async function getManagementOptions(actorRole: UserManagerRole) {
   return {
     roles: roles.map((role) => ({
       ...role,
-      createAllowed: managedRoleNames.has(role.name),
+      createAllowed: false,
       changeAllowed:
         managedRoleNames.has(role.name) &&
         role.name !== "Peace Forum President",
@@ -157,7 +158,7 @@ export async function getManagementOptions(actorRole: UserManagerRole) {
 }
 
 export async function searchUsers(
-  actorRole: UserManagerRole,
+  actorRole: UserDirectoryRole,
   input: ListUsersInput,
 ) {
   const { page, pageSize, ...filters } = input;
@@ -178,40 +179,32 @@ export async function searchUsers(
   };
 }
 
-export async function getUserDetails(
-  userId: string,
-  actorRole: UserManagerRole,
-) {
-  return getVisibleManagedUser(userId, actorRole);
+export async function requireUserDirectoryRole(
+  roles: Array<{ name: string; permissions: string[] }>,
+): Promise<UserDirectoryRole> {
+  const role = roles.find(
+    ({ name, permissions }) =>
+      [
+        "System Administrator",
+        "Peace Forum President",
+        "Peace Forum Vice President",
+        "Secretary",
+      ].includes(name) && permissions.includes("users:read"),
+  );
+  if (!role) {
+    throw new UserManagementError(
+      "You are not authorized to view approved user accounts.",
+      403,
+    );
+  }
+  return role.name as UserDirectoryRole;
 }
 
-export async function createManagedUser(
-  actorId: string,
-  actorRole: UserManagerRole,
-  input: CreateUserInput,
+export async function getUserDetails(
+  userId: string,
+  actorRole: UserDirectoryRole,
 ) {
-  const role = await validateAssignments(
-    input.roleId,
-    input.campusId,
-    input.organizationalUnitId,
-    actorRole,
-    true,
-  );
-  if (role.name === "Peace Forum President") {
-    if (actorRole !== "System Administrator") {
-      throw new UserManagementError(
-        "Only the System Administrator may provision the Peace Forum President account.",
-        403,
-      );
-    }
-  }
-  return createUserRecord(actorId, {
-    ...input,
-    passwordHash: await hashPassword(input.password),
-    roleId: role.id,
-    roleName: role.name,
-    mustChangePassword: true,
-  });
+  return getVisibleManagedUser(userId, actorRole);
 }
 
 export async function editManagedUser(

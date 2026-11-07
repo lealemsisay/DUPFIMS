@@ -11,7 +11,6 @@ import {
 } from "./user-controller";
 import {
   UserManagementError,
-  createManagedUser,
   editManagedUser,
   getManagedUserAudit,
   getManagementOptions,
@@ -20,6 +19,7 @@ import {
   grantRepresentativeDelegation,
   reassignManagedUser,
   resetManagedUserPassword,
+  requireUserDirectoryRole,
   requireUserManagerRole,
   revokeRepresentativeDelegation,
   searchUsers,
@@ -27,7 +27,6 @@ import {
 } from "./user-service";
 import {
   accountStatusSchema,
-  createUserSchema,
   resetPasswordSchema,
   roleAssignmentSchema,
   updateUserSchema,
@@ -115,25 +114,11 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
   router.post(
     "/",
     middleware.requireSameOrigin,
-    route(async (request, response) => {
-      const parsed = createUserSchema.safeParse(request.body);
-      if (!parsed.success) {
-        invalidRequest(
-          response,
-          parsed.error.issues.map(({ path }) => String(path[0] ?? "")),
-        );
-        return;
-      }
-      const actorRole = await requireUserManagerRole(
-        request.authenticatedUser?.roles ?? [],
-      );
-      const user = await createManagedUser(
-        getActorId(request),
-        actorRole,
-        parsed.data,
-      );
-      response.status(201).json({ user });
-    }),
+    (_request, response) => {
+      response.status(403).json({
+        error: "New accounts must be submitted as approval requests.",
+      });
+    },
   );
 
   router.get(
@@ -273,6 +258,12 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
       const actorRole = await requireUserManagerRole(
         request.authenticatedUser?.roles ?? [],
       );
+      if (actorRole === "System Administrator") {
+        response.status(403).json({
+          error: "The System Administrator cannot change assigned account roles.",
+        });
+        return;
+      }
       const user = await reassignManagedUser(
         getActorId(request),
         getUserId(request),
@@ -305,5 +296,28 @@ export function createUserRouter(middleware: UserRouterMiddleware) {
     }),
   );
 
+  return router;
+}
+
+export function createUserDirectoryRouter(
+  middleware: Pick<UserRouterMiddleware, "requireSession" | "requirePasswordChanged">,
+) {
+  const router = Router();
+  router.use(middleware.requireSession, middleware.requirePasswordChanged);
+  router.get(
+    "/",
+    route(async (request, response) => {
+      const parsed = userListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        invalidRequest(response);
+        return;
+      }
+      const actorRole = await requireUserDirectoryRole(
+        request.authenticatedUser?.roles ?? [],
+      );
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json(await searchUsers(actorRole, parsed.data));
+    }),
+  );
   return router;
 }

@@ -10,6 +10,7 @@ import {
   Mail,
   Menu,
   Settings,
+  ShieldCheck,
   ShieldAlert,
   UserRound,
   UsersRound,
@@ -45,7 +46,9 @@ const navigation = [
     icon: ChartNoAxesCombined,
     permission: "reports:read",
   },
-  { label: "User Management", href: "/dashboard/users", icon: UserRound, permission: "users:manage" },
+  { label: "User Management", href: "/dashboard/users", icon: UserRound, permission: "users:read" },
+  { label: "Account Requests", href: "/dashboard/account-requests", icon: UserRound, permission: "users:request" },
+  { label: "Account Approval", href: "/dashboard/account-approvals", icon: ShieldCheck, permission: "users:approve" },
   { label: "Campus Management", href: "/dashboard/campuses", icon: Building2, permission: "campuses:manage" },
   { label: "University Settings", href: "/dashboard/settings", icon: Settings, permission: "settings:manage" },
   { label: "My Profile", href: "/dashboard/profile", icon: FileText },
@@ -173,6 +176,17 @@ export function DashboardShell({
           className={`dashboard-sidebar${mobileMenuOpen ? " is-open" : ""}`}
           id="dashboard-navigation"
         >
+          <div className="sidebar-brand">
+            <span className="brand-crest sidebar-brand-crest" aria-hidden="true">
+              <Image
+                src="/images/dilla-university-logo.jpg"
+                alt=""
+                width={34}
+                height={34}
+              />
+            </span>
+            <span>Dilla University</span>
+          </div>
           <p className="sidebar-label">Main menu</p>
           <nav className="dashboard-nav" aria-label="Main navigation">
             {navigation

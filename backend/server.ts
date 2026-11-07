@@ -10,8 +10,13 @@ import { hashPassword, verifyPassword } from "../src/lib/password";
 import { getDashboardMetrics } from "../src/lib/services/dashboard";
 import { loginSchema, changePasswordSchema } from "../src/lib/validations/auth";
 import { prisma } from "./prisma";
-import { createUserRouter } from "./users/user-routes";
+import {
+  createUserDirectoryRouter,
+  createUserRouter,
+} from "./users/user-routes";
+import { createAccountRequestRouter } from "./users/account-request-routes";
 import { createCampusRouter } from "./campuses/campus-routes";
+import { createNotificationRouter } from "./notifications/notification-routes";
 
 config({ path: resolve(process.cwd(), ".env"), override: true });
 config({ path: resolve(process.cwd(), "backend", ".env") });
@@ -342,6 +347,23 @@ app.post(
 );
 
 app.use(
+  "/api/user-directory",
+  createUserDirectoryRouter({
+    requireSession,
+    requirePasswordChanged,
+  }),
+);
+
+app.use(
+  "/api/account-requests",
+  createAccountRequestRouter({
+    requireSession,
+    requirePasswordChanged,
+    requireSameOrigin,
+  }),
+);
+
+app.use(
   "/api/users",
   createUserRouter({
     requireSession,
@@ -353,6 +375,15 @@ app.use(
 app.use(
   "/api/campuses",
   createCampusRouter({
+    requireSession,
+    requirePasswordChanged,
+    requireSameOrigin,
+  }),
+);
+
+app.use(
+  "/api/notifications",
+  createNotificationRouter({
     requireSession,
     requirePasswordChanged,
     requireSameOrigin,

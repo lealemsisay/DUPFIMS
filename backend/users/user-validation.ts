@@ -12,30 +12,6 @@ const password = z
   .max(12)
   .refine((value) => Buffer.byteLength(value, "utf8") <= 72);
 
-export const createUserSchema = z.object({
-  fullName: z.string().trim().min(2).max(160),
-  username: z
-    .string()
-    .trim()
-    .min(3)
-    .max(64)
-    .regex(/^[a-zA-Z0-9._-]+$/)
-    .transform((value) => value.toLocaleLowerCase("en-US")),
-  email: z
-    .string()
-    .trim()
-    .email()
-    .max(254)
-    .transform((value) => value.toLocaleLowerCase("en-US")),
-  phoneNumber: nullableText(32),
-  password,
-  roleId: z.string().min(1).max(64),
-  campusId: z.string().min(1).max(64).nullable(),
-  organizationalUnitId: z.string().min(1).max(64).nullable(),
-  status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]),
-  mustChangePassword: z.literal(true),
-});
-
 export const updateUserSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
   email: z

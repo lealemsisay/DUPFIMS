@@ -1,8 +1,9 @@
 "use client";
 
-import { Pencil, Plus, RefreshCw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { RowActionMenu } from "./row-action-menu";
 
 type Campus = {
   id: string;
@@ -35,6 +36,7 @@ async function campusRequest<T>(url: string, init?: RequestInit): Promise<T> {
 export function CampusManagement() {
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [activeCampus, setActiveCampus] = useState<Campus>();
+  const [viewCampus, setViewCampus] = useState<Campus>();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -169,10 +171,24 @@ export function CampusManagement() {
                   <td><span className={`user-status ${campus.isActive ? "user-status-active" : "user-status-inactive"}`}>{campus.isActive ? "ACTIVE" : "INACTIVE"}</span></td>
                   <td>{new Date(campus.updatedAt).toLocaleString()}</td>
                   <td>
-                    <div className="user-row-actions">
-                      <button type="button" onClick={() => openEdit(campus)} aria-label={`Edit ${campus.name}`} title="Edit campus"><Pencil size={15} /></button>
-                      <button type="button" onClick={() => void toggleActive(campus)} aria-label={`${campus.isActive ? "Deactivate" : "Activate"} ${campus.name}`} title={campus.isActive ? "Deactivate campus" : "Activate campus"}><RefreshCw size={15} /></button>
-                    </div>
+                    <RowActionMenu
+                      label={campus.name}
+                      actions={[
+                        {
+                          label: "View campus",
+                          onSelect: () => setViewCampus(campus),
+                        },
+                        {
+                          label: "Edit campus",
+                          onSelect: () => openEdit(campus),
+                        },
+                        {
+                          label: campus.isActive ? "Deactivate campus" : "Activate campus",
+                          onSelect: () => void toggleActive(campus),
+                          destructive: campus.isActive,
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -203,6 +219,37 @@ export function CampusManagement() {
                 <button type="submit" className="user-primary-button" disabled={saving}>{saving ? "Saving…" : activeCampus ? "Save changes" : "Create campus"}</button>
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {viewCampus ? (
+        <div className="user-dialog-backdrop" onMouseDown={() => setViewCampus(undefined)}>
+          <section
+            className="user-dialog campus-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="campus-view-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="user-dialog-header">
+              <h2 id="campus-view-title">Campus details</h2>
+              <button type="button" className="user-icon-button" onClick={() => setViewCampus(undefined)} aria-label="Close dialog">×</button>
+            </header>
+            <dl className="user-detail-grid campus-detail-grid">
+              <div><dt>Campus identifier</dt><dd>{viewCampus.code}</dd></div>
+              <div><dt>Campus name</dt><dd>{viewCampus.name}</dd></div>
+              <div><dt>Status</dt><dd>{viewCampus.isActive ? "Active" : "Inactive"}</dd></div>
+              <div><dt>Created</dt><dd>{new Date(viewCampus.createdAt).toLocaleString()}</dd></div>
+              <div><dt>Last modified</dt><dd>{new Date(viewCampus.updatedAt).toLocaleString()}</dd></div>
+            </dl>
+            <div className="user-dialog-actions">
+              <button type="button" className="user-secondary-button" onClick={() => setViewCampus(undefined)}>Close</button>
+              <button type="button" className="user-primary-button" onClick={() => {
+                const campus = viewCampus;
+                setViewCampus(undefined);
+                openEdit(campus);
+              }}>Edit campus</button>
+            </div>
           </section>
         </div>
       ) : null}

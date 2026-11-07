@@ -33,6 +33,9 @@ const permissionDefinitions = [
   ["messages:read", "View messages addressed to the user."],
   ["reports:read", "View reports for authorized campuses."],
   ["users:manage", "Manage user accounts and role assignments."],
+  ["users:read", "View approved account information within authorized scope."],
+  ["users:request", "Submit account requests for approval."],
+  ["users:approve", "Approve, reject, or return account requests."],
   ["campuses:manage", "Manage campus records and assignments."],
   ["settings:manage", "Manage university-wide system settings."],
   ["delegations:manage", "Create and revoke time-limited campus delegations."],
@@ -47,6 +50,9 @@ const roleDefinitions = [
     permissions: [
       "dashboard:read",
       "users:manage",
+      "users:read",
+      "users:request",
+      "users:approve",
       "student:read",
       "case:read",
       "case:manage",
@@ -63,13 +69,22 @@ const roleDefinitions = [
   {
     name: "Peace Forum Vice President",
     description: "Supports Peace Forum leadership.",
-    permissions: ["dashboard:read", "information:read", "notifications:read", "messages:read"],
+    permissions: [
+      "dashboard:read",
+      "users:read",
+      "users:request",
+      "information:read",
+      "notifications:read",
+      "messages:read",
+    ],
   },
   {
     name: "Secretary",
     description: "Coordinates Peace Forum records and communications.",
     permissions: [
       "dashboard:read",
+      "users:read",
+      "users:request",
       "information:read",
       "information:submit",
       "notifications:read",
@@ -170,6 +185,7 @@ const roleDefinitions = [
     permissions: [
       "dashboard:read",
       "users:manage",
+      "users:read",
       "campuses:manage",
     ],
   },

@@ -3,9 +3,6 @@
 import {
   ChevronLeft,
   ChevronRight,
-  Eye,
-  KeyRound,
-  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -13,6 +10,8 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import Link from "next/link";
+import { RowActionMenu } from "./row-action-menu";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
@@ -63,29 +62,19 @@ type Delegation = {
 };
 type UserForm = {
   fullName: string;
-  username: string;
   email: string;
   phoneNumber: string;
-  password: string;
-  confirmPassword: string;
-  roleId: string;
   campusId: string;
   organizationalUnitId: string;
-  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 };
-type Panel = "create" | "view" | "edit" | "role" | "reset" | null;
+type Panel = "view" | "edit" | "role" | "reset" | null;
 
 const emptyForm: UserForm = {
   fullName: "",
-  username: "",
   email: "",
   phoneNumber: "",
-  password: "",
-  confirmPassword: "",
-  roleId: "",
   campusId: "",
   organizationalUnitId: "",
-  status: "ACTIVE",
 };
 
 const pageSize = 10;
@@ -217,6 +206,34 @@ export function UserManagement({
       ]),
     [],
   );
+  const manageableRoleNames = useMemo(
+    () =>
+      new Set(
+        managerRole === "System Administrator"
+          ? [
+              "Peace Forum President",
+              "Peace Forum Vice President",
+              "Secretary",
+              "University President",
+              "University Vice President 1",
+              "University Vice President 2",
+              "University Vice President 3",
+              "University Vice President 4",
+              "University Vice President 5",
+              "President's Office Staff",
+            ]
+          : [
+              "President's Representative",
+              "Peace Values Education",
+              "Women Affairs",
+              "Media and Communication",
+              "Rapid Response and Early Warning",
+              "Command Post",
+              "Campus Police",
+            ],
+      ),
+    [managerRole],
+  );
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -265,17 +282,6 @@ export function UserManagement({
     setActiveUser(undefined);
     setAuditEntries([]);
     setError("");
-  }
-
-  function startCreate() {
-    setError("");
-    setNotice("");
-    setActiveUser(undefined);
-    setForm({
-      ...emptyForm,
-      roleId: options?.roles.find((role) => role.createAllowed)?.id ?? "",
-    });
-    setPanel("create");
   }
 
   function startEdit(user: ManagedUser) {
@@ -398,11 +404,6 @@ export function UserManagement({
     event.preventDefault();
     setError("");
     setNotice("");
-    if (panel === "create" && form.password !== form.confirmPassword) {
-      setError("Password and confirmation must match.");
-      return;
-    }
-
     setBusy(true);
     try {
       const body = {
@@ -412,25 +413,14 @@ export function UserManagement({
         campusId: form.campusId || null,
         organizationalUnitId: form.organizationalUnitId || null,
       };
-      if (panel === "create") {
-        await requestJson("/api/users", {
-          method: "POST",
-          body: JSON.stringify({
-            ...body,
-            username: form.username,
-            password: form.password,
-            roleId: form.roleId,
-            status: form.status,
-            mustChangePassword: true,
-          }),
-        });
-        setNotice("The account was created. The user must change the initial password at first login.");
-      } else if (activeUser) {
+      if (activeUser) {
         await requestJson(`/api/users/${encodeURIComponent(activeUser.id)}`, {
           method: "PUT",
           body: JSON.stringify(body),
         });
         setNotice("Account details were updated.");
+      } else {
+        throw new Error("Select an account before saving changes.");
       }
       closePanel();
       await loadUsers();
@@ -540,12 +530,8 @@ export function UserManagement({
     }
   }
 
-  const selectedRoleName =
-    options?.roles.find((role) => role.id === form.roleId)?.name ?? "";
   const unitRequired =
-    panel === "edit"
-      ? Boolean(activeUser && organizationalRoleNames.has(roleName(activeUser)))
-      : organizationalRoleNames.has(selectedRoleName);
+    Boolean(activeUser && organizationalRoleNames.has(roleName(activeUser)));
   const maxPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -563,10 +549,12 @@ export function UserManagement({
               : "Manage appointed Peace Forum and university leadership accounts."}
           </p>
         </div>
-        <button className="user-primary-button" type="button" onClick={startCreate}>
-          <UserPlus size={16} aria-hidden="true" />
-          Create user
-        </button>
+        {managerRole === "Peace Forum President" ? (
+          <Link className="user-primary-button" href="/dashboard/account-requests">
+            <UserPlus size={16} aria-hidden="true" />
+            Submit account request
+          </Link>
+        ) : null}
       </div>
 
       {error && !panel ? <p className="user-alert is-error" role="alert">{error}</p> : null}
@@ -658,6 +646,57 @@ export function UserManagement({
                 const protectedAccount =
                   user.isProtectedAccount ||
                   user.roles.some(({ role }) => role.name === "System Administrator");
+                const inManagedScope =
+                  user.roles.length > 0 &&
+                  user.roles.every(({ role }) => manageableRoleNames.has(role.name));
+                const canManageAccount = inManagedScope && !protectedAccount;
+                const actions = [
+                  {
+                    label: "View account and history",
+                    onSelect: () => void viewUser(user),
+                  },
+                  ...(canManageAccount
+                    ? [
+                        {
+                          label: "Edit account",
+                          onSelect: () => startEdit(user),
+                        },
+                        ...(managerRole === "Peace Forum President" &&
+                        roleName(user) !== "Peace Forum President"
+                          ? [
+                              {
+                                label: "Change role",
+                                onSelect: () => startRoleChange(user),
+                              },
+                            ]
+                          : []),
+                        {
+                          label: "Reset password",
+                          onSelect: () => startPasswordReset(user),
+                        },
+                        {
+                          label:
+                            user.status === "ACTIVE"
+                              ? "Suspend account"
+                              : "Activate account",
+                          onSelect: () =>
+                            void setStatus(
+                              user,
+                              user.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+                            ),
+                        },
+                        ...(user.status === "ACTIVE"
+                          ? [
+                              {
+                                label: "Deactivate account",
+                                onSelect: () => void setStatus(user, "INACTIVE"),
+                                destructive: true,
+                              },
+                            ]
+                          : []),
+                      ]
+                    : []),
+                ];
                 return (
                   <tr key={user.id}>
                     <td>
@@ -674,20 +713,7 @@ export function UserManagement({
                     <td>{new Date(user.createdAt).toLocaleDateString()}</td>
                     <td>{formatDate(user.lastLoginAt)}</td>
                     <td>
-                      <div className="user-row-actions">
-                        <button type="button" onClick={() => void viewUser(user)} aria-label={`View ${user.fullName}`} title="View details and history"><Eye size={15} /></button>
-                        <button type="button" onClick={() => startEdit(user)} disabled={protectedAccount} aria-label={`Edit ${user.fullName}`} title="Edit account"><Pencil size={15} /></button>
-                        <button type="button" onClick={() => startRoleChange(user)} disabled={protectedAccount || roleName(user) === "Peace Forum President"} aria-label={`Change role for ${user.fullName}`} title="Change role"><Shield size={15} /></button>
-                        <button type="button" onClick={() => startPasswordReset(user)} disabled={protectedAccount} aria-label={`Reset password for ${user.fullName}`} title="Reset password"><KeyRound size={15} /></button>
-                        {user.status === "ACTIVE" ? (
-                          <>
-                            <button type="button" onClick={() => void setStatus(user, "SUSPENDED")} disabled={protectedAccount} aria-label={`Suspend ${user.fullName}`} title="Suspend"><span aria-hidden="true">Ⅱ</span></button>
-                            <button type="button" onClick={() => void setStatus(user, "INACTIVE")} disabled={protectedAccount} aria-label={`Deactivate ${user.fullName}`} title="Deactivate"><X size={15} /></button>
-                          </>
-                        ) : (
-                          <button type="button" onClick={() => void setStatus(user, "ACTIVE")} disabled={protectedAccount} aria-label={`Activate ${user.fullName}`} title="Activate"><RefreshCw size={15} /></button>
-                        )}
-                      </div>
+                      <RowActionMenu label={user.fullName} actions={actions} />
                     </td>
                   </tr>
                 );
@@ -706,53 +732,25 @@ export function UserManagement({
         </footer>
       </section>
 
-      {panel === "create" || panel === "edit" ? (
-        <Dialog title={panel === "create" ? "Create user account" : "Edit user account"} onClose={closePanel}>
+      {panel === "edit" ? (
+        <Dialog title="Edit user account" onClose={closePanel}>
           <form className="user-form" onSubmit={submitUser}>
             <div className="user-form-grid">
               <label>Full name<input required minLength={2} maxLength={160} value={form.fullName} onChange={(event) => setField("fullName", event.target.value)} autoComplete="name" /></label>
-              {panel === "create" ? (
-                <label>Username<input required minLength={3} maxLength={64} pattern="(?:[A-Za-z0-9._]|-)+" value={form.username} onChange={(event) => setField("username", event.target.value)} autoComplete="username" /><span className="user-field-hint">3–64 characters; use letters, numbers, periods, underscores, or hyphens.</span></label>
-              ) : (
-                <label>Username<input value={activeUser?.username ?? ""} readOnly /></label>
-              )}
+              <label>Username<input value={activeUser?.username ?? ""} readOnly /></label>
               <label>Email address<input required type="email" maxLength={254} value={form.email} onChange={(event) => setField("email", event.target.value)} autoComplete="email" /></label>
               <label>Phone number<input type="tel" maxLength={32} value={form.phoneNumber} onChange={(event) => setField("phoneNumber", event.target.value)} autoComplete="tel" /></label>
-              {panel === "create" ? (
-                <>
-                  <label>User role<select required value={form.roleId} onChange={(event) => {
-                    const nextRoleId = event.target.value;
-                    const nextRoleName = options?.roles.find((role) => role.id === nextRoleId)?.name;
-                    const nextUnit = options?.organizationalUnits.find((unit) => unit.name === nextRoleName);
-                    setField("roleId", nextRoleId);
-                    setField("organizationalUnitId", nextUnit?.id ?? "");
-                  }}><option value="">Select a role</option>{options?.roles.filter((role) => role.createAllowed).map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
-                  <label>Account status<select value={form.status} onChange={(event) => setField("status", event.target.value as UserForm["status"])}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="SUSPENDED">Suspended</option></select></label>
-                  <label className="user-checkbox-field"><input type="checkbox" checked readOnly /> Require password change at first login</label>
-                </>
-              ) : null}
               <label>Campus assignment{unitRequired ? <span className="user-required-note">Required for this role</span> : null}<select required={unitRequired} value={form.campusId} onChange={(event) => setField("campusId", event.target.value)}><option value="">No campus assignment</option>{options?.campuses.map((campus) => <option value={campus.id} key={campus.id}>{campus.name} ({campus.code})</option>)}</select></label>
               {unitRequired ? (
                 <label>Organizational unit<select required value={form.organizationalUnitId} onChange={(event) => setField("organizationalUnitId", event.target.value)}><option value="">Select a unit</option>{options?.organizationalUnits.map((unit) => <option value={unit.id} key={unit.id}>{unit.name}</option>)}</select></label>
               ) : panel === "edit" && form.organizationalUnitId ? (
                 <label>Organizational unit<input value={activeUser?.organizationalUnits[0]?.organizationalUnit.name ?? ""} readOnly /></label>
               ) : null}
-              {panel === "create" ? (
-                <>
-                  <label>Initial password<input required type="password" minLength={6} maxLength={12} value={form.password} onChange={(event) => setField("password", event.target.value)} autoComplete="new-password" /><span className="user-field-hint">6–12 characters. The user will be required to change it at first login.</span></label>
-                  <label>Confirm password<input required type="password" minLength={6} maxLength={12} value={form.confirmPassword} onChange={(event) => setField("confirmPassword", event.target.value)} autoComplete="new-password" /></label>
-                  <div className="user-password-generate"><button type="button" onClick={() => {
-                    const generated = generatePassword();
-                    setField("password", generated);
-                    setField("confirmPassword", generated);
-                  }}>Generate password</button><span>Generated only in this browser; it is never returned by the API.</span></div>
-                </>
-              ) : null}
             </div>
             {error ? <p className="user-alert is-error" role="alert">{error}</p> : null}
             <div className="user-dialog-actions">
               <button type="button" className="user-secondary-button" onClick={closePanel}>Cancel</button>
-              <button type="submit" className="user-primary-button" disabled={busy}>{busy ? "Saving…" : panel === "create" ? <><Plus size={15} /> Create account</> : "Save changes"}</button>
+              <button type="submit" className="user-primary-button" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
           </form>
         </Dialog>

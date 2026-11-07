@@ -14,6 +14,13 @@ enum UserStatus {
   LOCKED
 }
 
+enum AccountRequestStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  RETURNED_FOR_CORRECTION
+}
+
 enum DisciplinaryCaseStatus {
   OPEN
   UNDER_REVIEW
@@ -52,6 +59,9 @@ model User {
   auditEntries        AuditLog[]               @relation("AuditActor")
   delegationsGiven    Delegation[]             @relation("DelegationGrantor")
   delegationsReceived Delegation[]             @relation("DelegationDelegate")
+  submittedAccountRequests UserAccountRequest[]     @relation("AccountRequestSubmitter")
+  approvedAccountRequest  UserAccountRequest?       @relation("ApprovedAccount")
+  accountApprovalDecisions AccountRequestDecision[] @relation("AccountRequestApprover")
 }
 
 model UserSession {
@@ -75,6 +85,7 @@ model Role {
   updatedAt   DateTime         @updatedAt
   users       UserRole[]
   permissions RolePermission[]
+  accountRequests UserAccountRequest[]
 }
 
 model Permission {
@@ -106,19 +117,20 @@ model RolePermission {
 }
 
 model Campus {
-  id           String                  @id @default(cuid())
-  code         String                  @unique
-  name         String
-  isActive     Boolean                 @default(true)
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
-  users        UserCampus[]
-  students     Student[]
-  cases        DisciplinaryCase[]
-  submissions  InformationSubmission[]
-  messages     Message[]
-  auditEntries AuditLog[]
-  delegations  Delegation[]
+  id              String                  @id @default(cuid())
+  code            String                  @unique
+  name            String
+  isActive        Boolean                 @default(true)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  users           UserCampus[]
+  students        Student[]
+  cases           DisciplinaryCase[]
+  submissions     InformationSubmission[]
+  messages        Message[]
+  auditEntries    AuditLog[]
+  delegations     Delegation[]
+  accountRequests UserAccountRequest[]
 
   @@index([name])
 }
@@ -144,6 +156,52 @@ model OrganizationalUnit {
   parent    OrganizationalUnit?      @relation("OrganizationalHierarchy", fields: [parentId], references: [id])
   children  OrganizationalUnit[]     @relation("OrganizationalHierarchy")
   members   UserOrganizationalUnit[]
+  accountRequests UserAccountRequest[]
+}
+
+model UserAccountRequest {
+  id                    String               @id @default(cuid())
+  requesterId           String
+  username              String
+  email                 String
+  fullName              String
+  phoneNumber           String?
+  passwordHash          String?
+  roleId                String
+  campusId              String?
+  organizationalUnitId  String?
+  status                AccountRequestStatus @default(PENDING_APPROVAL)
+  decisionReason        String?
+  approvedUserId        String?              @unique
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  decidedAt             DateTime?
+  requester             User                 @relation("AccountRequestSubmitter", fields: [requesterId], references: [id], onDelete: Restrict)
+  role                  Role                 @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  campus                Campus?              @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  organizationalUnit    OrganizationalUnit?  @relation(fields: [organizationalUnitId], references: [id], onDelete: Restrict)
+  approvedUser          User?                @relation("ApprovedAccount", fields: [approvedUserId], references: [id], onDelete: Restrict)
+  decisions             AccountRequestDecision[]
+
+  @@index([requesterId, createdAt])
+  @@index([status, createdAt])
+  @@index([roleId])
+  @@index([campusId])
+  @@index([organizationalUnitId])
+}
+
+model AccountRequestDecision {
+  id        String            @id @default(cuid())
+  requestId String
+  actorId   String
+  action    String
+  reason    String
+  createdAt DateTime          @default(now())
+  request   UserAccountRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor     User              @relation("AccountRequestApprover", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model UserOrganizationalUnit {

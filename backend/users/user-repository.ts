@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import {
   exclusiveRoleNames,
-  managedRoleNamesFor,
-  type UserManagerRole,
+  visibleRoleNamesFor,
+  type UserDirectoryRole,
 } from "./assignable-roles";
 
 export class ExclusiveRoleAlreadyAssignedError extends Error {
@@ -38,22 +38,8 @@ const userSelect = {
   },
 } satisfies Prisma.UserSelect;
 
-export type CreateUserRecord = {
-  username: string;
-  email: string | null;
-  fullName: string;
-  phoneNumber: string | null;
-  passwordHash: string;
-  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
-  mustChangePassword: boolean;
-  roleId: string;
-  roleName: string;
-  campusId: string | null;
-  organizationalUnitId: string | null;
-};
-
 export async function listUsers(
-  actorRole: UserManagerRole,
+  actorRole: UserDirectoryRole,
   filters: {
     search?: string;
     roleId?: string;
@@ -66,7 +52,7 @@ export async function listUsers(
   const where: Prisma.UserWhereInput = {
     roles: {
       some: {
-        role: { name: { in: [...managedRoleNamesFor(actorRole)] } },
+        role: { name: { in: [...visibleRoleNamesFor(actorRole)] } },
       },
     },
     ...(filters.status ? { status: filters.status } : {}),
@@ -75,7 +61,7 @@ export async function listUsers(
           AND: [
             {
               roles: {
-                some: { role: { name: { in: [...managedRoleNamesFor(actorRole)] } } },
+                some: { role: { name: { in: [...visibleRoleNamesFor(actorRole)] } } },
               },
             },
             { roles: { some: { roleId: filters.roleId } } },
@@ -159,68 +145,6 @@ export function getOrganizationalUnitByName(name: string) {
     where: { name },
     select: { id: true, name: true },
   });
-}
-
-export async function createUserRecord(
-  actorId: string,
-  user: CreateUserRecord,
-) {
-  return prisma.$transaction(async (transaction) => {
-    if ((exclusiveRoleNames as readonly string[]).includes(user.roleName)) {
-      const existingRoleAssignment = await transaction.userRole.count({
-        where: {
-          roleId: user.roleId,
-        },
-      });
-      if (existingRoleAssignment > 0) {
-        throw new ExclusiveRoleAlreadyAssignedError(user.roleName);
-      }
-    }
-    const created = await transaction.user.create({
-      data: {
-        username: user.username,
-        email: user.email,
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        passwordHash: user.passwordHash,
-        status: user.status,
-        mustChangePassword: user.mustChangePassword,
-        roles: { create: { role: { connect: { id: user.roleId } } } },
-        ...(user.campusId
-          ? {
-              campuses: {
-                create: {
-                  campus: { connect: { id: user.campusId } },
-                  isPrimary: true,
-                },
-              },
-            }
-          : {}),
-        ...(user.organizationalUnitId
-          ? {
-              organizationalUnits: {
-                create: {
-                  organizationalUnit: {
-                    connect: { id: user.organizationalUnitId },
-                  },
-                },
-              },
-            }
-          : {}),
-      },
-      select: userSelect,
-    });
-    await transaction.auditLog.create({
-      data: {
-        actorId,
-        action: "USER_CREATED",
-        entityType: "User",
-        entityId: created.id,
-        detail: { username: created.username, role: user.roleName },
-      },
-    });
-    return created;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function updateUserRecord(
