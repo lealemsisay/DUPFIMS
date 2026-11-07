@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 
@@ -12,6 +12,17 @@ export function LoginForm() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [authenticationError, setAuthenticationError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (window.location.search) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        window.location.pathname,
+      );
+    }
+  }, []);
+
   const {
     register,
     handleSubmit,
