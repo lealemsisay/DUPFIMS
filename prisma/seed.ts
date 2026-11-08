@@ -40,7 +40,33 @@ const permissionDefinitions = [
   ["settings:manage", "Manage university-wide system settings."],
   ["delegations:manage", "Create and revoke time-limited campus delegations."],
   ["audit:read", "View audit records within authorized scope."],
+  ["information:forward", "Forward information to university leadership."],
+  ["customfields:manage", "Create and archive custom student fields."],
 ] as const;
+
+const executiveCore = [
+  "dashboard:read",
+  "student:read",
+  "student:manage",
+  "case:read",
+  "case:manage",
+  "information:read",
+  "information:submit",
+  "notifications:read",
+  "messages:read",
+];
+
+// Everything the President page has, except account decisions and forwarding.
+const presidentLevel = [
+  ...executiveCore,
+  "information:manage",
+  "reports:read",
+  "audit:read",
+  "customfields:manage",
+  "users:read",
+  "users:request",
+];
+
 
 const roleDefinitions = [
   {
